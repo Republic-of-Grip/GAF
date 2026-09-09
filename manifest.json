@@ -1,0 +1,84 @@
+{
+  "manifest_version": 3,
+  "name": "GAF — General Annoyance Filter",
+  "short_name": "GAF",
+  "version": "0.2.27",
+  "description": "Personal web filter: freeze media & motion, soft-paywall time freeze, meter cookie reset, element hide, interaction guard (cookie/grey unlock), and inspection archive. You take control.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "cookies"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "GAF: filtering ON",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-on-16.png",
+      "32": "icons/icon-on-32.png",
+      "48": "icons/icon-on-48.png",
+      "128": "icons/icon-on-128.png"
+    }
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon-on-16.png",
+    "32": "icons/icon-on-32.png",
+    "48": "icons/icon-on-48.png",
+    "128": "icons/icon-on-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "src/content/time-freeze-main.js",
+        "src/content/preview-video-main.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/early.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/unstick-early.js"],
+      "run_at": "document_idle",
+      "all_frames": false,
+      "match_about_blank": false
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/main.js"],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/core/*.mjs"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

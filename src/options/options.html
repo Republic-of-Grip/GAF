@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GAF options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <p class="eyebrow" id="installedEyebrow" data-version-template="GAF v{version}">GAF</p>
+          <h1>General Annoyance Filter</h1>
+          <p class="lead">
+            Features stay <strong>on by default</strong>. When a site breaks, exclude it into the
+            <em>review backlog</em> — that list is a work queue, not a graveyard. Right-click any
+            object → <strong>GAF: Save object for inspection</strong> to archive HTML and escape hints.
+          </p>
+        </div>
+        <label class="switch large">
+          <input type="checkbox" id="enabled" />
+          <span class="slider"></span>
+          <span class="switch-label">Enabled</span>
+        </label>
+      </header>
+
+      <nav class="tabs" role="tablist">
+        <button type="button" class="tab active" data-tab="filters">Filters</button>
+        <button type="button" class="tab" data-tab="time">Time freeze</button>
+        <button type="button" class="tab" data-tab="backlog">Exclusion backlog</button>
+        <button type="button" class="tab" data-tab="archive">Inspection archive</button>
+        <button type="button" class="tab" data-tab="advanced">Advanced</button>
+      </nav>
+
+      <main>
+        <section class="card tab-panel active" data-panel="filters">
+          <h2>Media &amp; motion</h2>
+          <label class="field">
+            <input type="checkbox" id="freezeImages" />
+            <div>
+              <strong>Freeze animated images</strong>
+              <p>GIF still snapshots via canvas.</p>
+            </div>
+          </label>
+
+          <label class="field stack">
+            <strong>Video autoplay policy</strong>
+            <select id="videoPolicy">
+              <option value="off">Off</option>
+              <option value="news">News sites — front &amp; section pages</option>
+              <option value="heuristic">Heuristic (default) — broader autoplay freeze</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="useDefaultNewsHosts" />
+            <div>
+              <strong>Use built-in news host list</strong>
+            </div>
+          </label>
+
+          <label class="field stack">
+            <strong>Extra news hosts</strong>
+            <textarea id="newsHosts" rows="4" spellcheck="false"></textarea>
+          </label>
+
+          <label class="field stack">
+            <strong>CSS motion level</strong>
+            <select id="motionLevel">
+              <option value="off">Off</option>
+              <option value="moderate">Moderate</option>
+              <option value="strict">Strict</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="pauseScriptedMotion" />
+            <div>
+              <strong>Pause scripted motion</strong>
+              <p>WAAPI, SVG SMIL, Lottie players.</p>
+            </div>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="elementHiding" />
+            <div>
+              <strong>Element hiding</strong>
+              <p>Hide paywall chrome and similar overlays via CSS selectors.</p>
+            </div>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="useDefaultHideRules" />
+            <div>
+              <strong>Use built-in hide rules</strong>
+            </div>
+          </label>
+
+          <label class="field stack">
+            <strong>Extra hide selectors</strong>
+            <textarea id="hideRules" rows="5" spellcheck="false" placeholder=".annoying-banner&#10;#modal-newsletter"></textarea>
+            <p class="hint">One CSS selector per line.</p>
+          </label>
+        </section>
+
+        <section class="card tab-panel" data-panel="time">
+          <h2>Time freeze (soft paywalls)</h2>
+          <p class="hint">
+            Soft walls (e.g. The Telegraph) often load the article first, then a timer or script
+            blurs/removes it. <strong>Slow</strong> stretches page timers so you keep a long window
+            for Reader Mode or Save as PDF. <strong>Stop + snapshot</strong> also captures a reading
+            clone of the page you can keep after the live DOM is ruined.
+          </p>
+
+          <label class="field stack">
+            <strong>Mode</strong>
+            <select id="timeFreezeMode">
+              <option value="off">Off</option>
+              <option value="slow">Slow timers (default)</option>
+              <option value="stop">Stop timers + reading snapshot</option>
+            </select>
+          </label>
+
+          <label class="field stack">
+            <strong>Where it applies</strong>
+            <select id="timeFreezeScope">
+              <option value="softwall">Soft-wall hosts only (recommended)</option>
+              <option value="all">All sites (can break lazy-loaded images)</option>
+            </select>
+            <p class="hint">
+              Global timer stretch used to blank below-the-fold images on papers like
+              <code>av-avis.no</code>. Soft-wall scope avoids that while still helping Telegraph-style meters.
+            </p>
+          </label>
+
+          <label class="field stack">
+            <strong>Slow factor</strong>
+            <input type="number" id="timeFreezeSlowFactor" min="2" max="500" step="1" />
+            <p class="hint">Timer delays are multiplied by this (e.g. 5s × 80 ≈ 6–7 minutes).</p>
+          </label>
+
+          <label class="field stack">
+            <strong>Only stretch timers ≥ (ms)</strong>
+            <input type="number" id="timeFreezeMinMs" min="0" max="60000" step="100" />
+            <p class="hint">
+              Delays shorter than this stay real-time (lazy-load, UI). Default 2000 — soft walls
+              usually use multi-second meters.
+            </p>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="timeFreezeSnapshot" />
+            <div>
+              <strong>Auto reading snapshot in Stop mode</strong>
+              <p>Capture shortly after load on article-like pages / soft-wall hosts.</p>
+            </div>
+          </label>
+
+          <label class="field stack">
+            <strong>Snapshot delay (ms)</strong>
+            <input type="number" id="timeFreezeSnapshotDelayMs" min="200" max="15000" step="100" />
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="useDefaultSoftwallHosts" />
+            <div>
+              <strong>Use built-in soft-wall host hints</strong>
+              <p>Telegraph, NYT, FT, WSJ, … (used for snapshot prioritization).</p>
+            </div>
+          </label>
+
+          <label class="field stack">
+            <strong>Extra soft-wall hosts</strong>
+            <textarea id="softwallHosts" rows="4" spellcheck="false"></textarea>
+          </label>
+
+          <h2 class="subhead">Free-article meter (cookies)</h2>
+          <p class="hint">
+            Some sites (e.g. <code>spiked-online.com</code>) count free reads in cookies — opening
+            Incognito “works” because the counter is empty. <strong>Reset meter</strong> clears site
+            cookies (and optional storage) then reloads. Same idea as forgetting the site; you may
+            need to log in again if you had a membership session.
+          </p>
+
+          <label class="field">
+            <input type="checkbox" id="meterResetEnabled" />
+            <div>
+              <strong>Enable meter reset</strong>
+              <p>Popup button + right-click menu.</p>
+            </div>
+          </label>
+
+          <label class="field stack">
+            <strong>Mode</strong>
+            <select id="meterResetMode">
+              <option value="auto">Auto (default) — disarm + cookie wipe if needed</option>
+              <option value="manual">Manual cookie wipe only (disarm still automatic)</option>
+              <option value="off">Off — no meter actions</option>
+            </select>
+            <p class="hint">
+              Gate chrome (Spiked blue box) is hidden automatically when disarm is on.
+              <strong>Auto</strong> only clears meter-named cookies, and only when a
+              named gate or (generic chrome + wall text) is detected after disarm.
+              Short body or a lone <code>[class*="metered"]</code> is not enough.
+              Keep the popup button for a confirmed full wipe.
+            </p>
+          </label>
+
+          <label class="field stack">
+            <strong>Auto scope</strong>
+            <select id="meterResetScope">
+              <option value="softwall">Soft-wall hosts only</option>
+              <option value="all">Any article-like page</option>
+            </select>
+          </label>
+
+          <label class="field stack">
+            <strong>Cookies to clear (manual reset)</strong>
+            <select id="meterResetCookieMode">
+              <option value="meter-names">Only meter-like cookie names (default)</option>
+              <option value="all">All cookies visible to this page URL (may log you out)</option>
+            </select>
+            <p class="hint">
+              Auto mode always uses meter-like names. “All cookies” is queried by
+              page URL only — sibling hosts are not scanned.
+            </p>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="meterResetClearStorage" />
+            <div>
+              <strong>Also clear localStorage / sessionStorage</strong>
+              <p>Some meters store the count in web storage, not only cookies.</p>
+            </div>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="meterResetClearDurableStorage" />
+            <div>
+              <strong>Also delete IndexedDB and Cache Storage (manual only)</strong>
+              <p>
+                Off by default. This can destroy site apps and offline data.
+                Auto mode never does this.
+              </p>
+            </div>
+          </label>
+
+          <label class="field">
+            <input type="checkbox" id="meterDisarm" />
+            <div>
+              <strong>Disarm gate chrome in the page</strong>
+              <p>
+                Hide free-article overlays when the article body is already in the HTML
+                (e.g. Spiked <code>.gated-content-wrap.paywall</code>). Cookie wipe alone is often not enough.
+              </p>
+            </div>
+          </label>
+        </section>
+
+        <section class="card tab-panel" data-panel="backlog">
+          <h2>Exclusion backlog</h2>
+          <p class="hint">
+            Sites you excluded because GAF broke something. Treat each row as a bug ticket:
+            inspect, improve filters, then mark <strong>resolved</strong> or remove to re-enable filtering.
+          </p>
+          <div id="backlogList" class="list"></div>
+          <p id="backlogEmpty" class="hint">No exclusions yet. Good — filtering is running everywhere.</p>
+        </section>
+
+        <section class="card tab-panel" data-panel="archive">
+          <h2>Inspection archive</h2>
+          <p class="hint">
+            Right-click an object on any page → <strong>GAF: Save object for inspection</strong>.
+            Entries include selector hints, HTML, and reasons the object may have escaped filters.
+            From here you can <strong>promote a capture into a hide rule</strong> (global or host-only)
+            — the practical next step when something slipped through.
+          </p>
+          <div class="footer-actions" style="margin-bottom: 12px">
+            <button type="button" id="refreshArchive" class="btn">Refresh</button>
+            <button type="button" id="clearArchive" class="btn">Clear archive</button>
+          </div>
+          <div id="archiveList" class="list"></div>
+          <p id="archiveEmpty" class="hint">Archive is empty.</p>
+        </section>
+
+        <section class="card tab-panel" data-panel="advanced">
+          <h2>Force-filter hosts</h2>
+          <p class="hint">Always run GAF even if somehow skipped (wins over exclusion).</p>
+          <label class="field stack">
+            <strong>Deny list</strong>
+            <textarea id="denyHosts" rows="4" spellcheck="false"></textarea>
+          </label>
+
+          <h2>Per-host custom CSS</h2>
+          <label class="field">
+            <input type="checkbox" id="customCss" />
+            <div>
+              <strong>Enable custom CSS map</strong>
+            </div>
+          </label>
+          <label class="field stack">
+            <strong>Site CSS JSON</strong>
+            <textarea id="siteCssJson" rows="8" spellcheck="false" placeholder='{"telegraph.co.uk":".something{display:none}"}'></textarea>
+            <p class="hint">Object map: host → CSS string.</p>
+          </label>
+
+          <h2>Import / export</h2>
+          <div class="footer-actions">
+            <button type="button" id="exportPack" class="btn">Export filter pack</button>
+            <label class="btn file-btn">
+              Import filter pack
+              <input type="file" id="importPack" accept="application/json,.json" hidden />
+            </label>
+          </div>
+        </section>
+      </main>
+
+      <section class="card updates-card" aria-labelledby="updatesHeading">
+        <h2 id="updatesHeading">Updates</h2>
+        <p class="hint">
+          Installed version: <strong id="installedVersion">—</strong>.
+          Compare with the version published on
+          <a href="https://github.com/Republic-of-Grip/gaf" target="_blank" rel="noreferrer">GitHub</a>.
+          Update appears only when that remote version is newer. GAF will not install anything unless you click Update.
+        </p>
+        <div class="footer-actions">
+          <button type="button" id="checkUpdates" class="btn">Check for updates</button>
+          <button type="button" id="applyUpdate" class="btn primary" hidden>Update</button>
+        </div>
+        <p id="updateStatus" class="hint update-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <footer>
+        <div class="footer-actions">
+          <button type="button" id="save" class="btn primary">Save</button>
+          <button type="button" id="reset" class="btn">Reset to defaults</button>
+        </div>
+        <p id="toast" class="toast" hidden></p>
+        <p class="version" id="footerVersion" data-version-template="GAF v{version} · Chromium / Helium · Windows &amp; Linux">
+          GAF · Chromium / Helium · Windows &amp; Linux
+        </p>
+      </footer>
+    </div>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

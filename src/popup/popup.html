@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GAF</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="logo" id="brandLogo" aria-hidden="true">GAF</span>
+        <div>
+          <h1>General Annoyance Filter</h1>
+          <p class="tagline" id="brandTagline">Green = filtering on · Grey/slash = off</p>
+        </div>
+      </div>
+      <label class="switch" title="Master switch">
+        <input type="checkbox" id="enabled" />
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <section class="status" id="statusLine">Loading…</section>
+
+    <section class="controls">
+      <label class="row">
+        <span>Freeze animated images</span>
+        <input type="checkbox" id="freezeImages" />
+      </label>
+
+      <label class="row">
+        <span>Video autoplay</span>
+        <select id="videoPolicy">
+          <option value="off">Off</option>
+          <option value="news">News only</option>
+          <option value="heuristic">Heuristic</option>
+        </select>
+      </label>
+
+      <label class="row">
+        <span>CSS motion</span>
+        <select id="motionLevel">
+          <option value="off">Off</option>
+          <option value="moderate">Moderate</option>
+          <option value="strict">Strict</option>
+        </select>
+      </label>
+
+      <label class="row">
+        <span>Time freeze</span>
+        <select id="timeFreezeMode">
+          <option value="off">Off</option>
+          <option value="slow">Slow (soft wall)</option>
+          <option value="stop">Stop + snapshot</option>
+        </select>
+      </label>
+
+      <label class="row">
+        <span>Element hiding</span>
+        <input type="checkbox" id="elementHiding" />
+      </label>
+
+      <label class="row">
+        <span>Pause scripted motion</span>
+        <input type="checkbox" id="pauseScriptedMotion" />
+      </label>
+    </section>
+
+    <section class="site" id="siteSection">
+      <p class="site-host" id="siteHost">—</p>
+      <div class="site-actions">
+        <button type="button" id="excludeSite" class="btn ghost">
+          Exclude site → review backlog
+        </button>
+        <button type="button" id="denySite" class="btn ghost">Force filter this site</button>
+        <button type="button" id="clearSite" class="btn ghost hidden">Clear site rule</button>
+        <button type="button" id="snapshotNow" class="btn ghost">Freeze snapshot now</button>
+        <button type="button" id="thawNow" class="btn ghost">Thaw page</button>
+        <button type="button" id="resetMeter" class="btn ghost" title="Clear site cookies (free-article meter) and reload — like opening Incognito">
+          Reset free-article meter
+        </button>
+      </div>
+    </section>
+
+    <section class="updates" aria-labelledby="checkUpdates">
+      <button type="button" id="checkUpdates" class="btn ghost">Check for updates</button>
+      <p id="updateStatus" class="update-status" role="status" aria-live="polite"></p>
+      <button type="button" id="applyUpdate" class="btn primary" hidden>Update</button>
+    </section>
+
+    <footer>
+      <button type="button" id="runNow" class="btn">Re-apply</button>
+      <a href="#" id="openOptions">Options &amp; archive</a>
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

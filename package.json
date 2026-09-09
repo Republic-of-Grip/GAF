@@ -1,0 +1,13 @@
+{
+  "name": "gaf",
+  "version": "0.2.27",
+  "private": true,
+  "description": "GAF — General Annoyance Filter. Personal Chromium web filter.",
+  "scripts": {
+    "test": "node --test",
+    "icons": "node scripts/generate-icons.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
