@@ -7,7 +7,7 @@
  */
 
 export const GITHUB_OWNER = 'Republic-of-Grip';
-export const GITHUB_REPO = 'gaf';
+export const GITHUB_REPO = 'GAF';
 export const GITHUB_DEFAULT_BRANCH = 'main';
 
 export const UPDATE_APPLY_HINT =

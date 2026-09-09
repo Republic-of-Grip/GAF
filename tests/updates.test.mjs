@@ -74,34 +74,34 @@ test('extensionsPageUrl prefers helium:// on Helium', () => {
   assert.equal(extensionsPageUrl('Mozilla/5.0 Chrome/128'), 'chrome://extensions');
 });
 
-test('GitHub URLs point at Republic-of-Grip/gaf', () => {
+test('GitHub URLs point at Republic-of-Grip/GAF', () => {
   assert.equal(GITHUB_OWNER, 'Republic-of-Grip');
-  assert.equal(GITHUB_REPO, 'gaf');
-  assert.equal(githubApiUrl('/releases/latest'), 'https://api.github.com/repos/Republic-of-Grip/gaf/releases/latest');
+  assert.equal(GITHUB_REPO, 'GAF');
+  assert.equal(githubApiUrl('/releases/latest'), 'https://api.github.com/repos/Republic-of-Grip/GAF/releases/latest');
   assert.equal(
     githubArchiveZipUrl('v0.2.27'),
-    'https://github.com/Republic-of-Grip/gaf/archive/refs/tags/v0.2.27.zip'
+    'https://github.com/Republic-of-Grip/GAF/archive/refs/tags/v0.2.27.zip'
   );
   assert.equal(
     githubArchiveZipUrl('main', { isBranch: true }),
-    'https://github.com/Republic-of-Grip/gaf/archive/refs/heads/main.zip'
+    'https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip'
   );
   assert.equal(
     githubManifestUrl(),
-    'https://raw.githubusercontent.com/Republic-of-Grip/gaf/main/manifest.json'
+    'https://raw.githubusercontent.com/Republic-of-Grip/GAF/main/manifest.json'
   );
 });
 
 test('fetchLatestPublishedVersion prefers a GitHub release', async () => {
   const fetchFn = mockFetch([
-    ['/releases/latest', jsonResponse({ tag_name: 'v0.2.27', html_url: 'https://github.com/Republic-of-Grip/gaf/releases/tag/v0.2.27' })],
+    ['/releases/latest', jsonResponse({ tag_name: 'v0.2.27', html_url: 'https://github.com/Republic-of-Grip/GAF/releases/tag/v0.2.27' })],
     ['/tags', jsonResponse([{ name: 'v0.2.1' }])],
     ['manifest.json', jsonResponse({ version: '0.2.0' })],
   ]);
   const remote = await fetchLatestPublishedVersion(fetchFn);
   assert.equal(remote.version, '0.2.27');
   assert.equal(remote.source, 'release');
-  assert.equal(remote.zipUrl, 'https://github.com/Republic-of-Grip/gaf/archive/refs/tags/v0.2.27.zip');
+  assert.equal(remote.zipUrl, 'https://github.com/Republic-of-Grip/GAF/archive/refs/tags/v0.2.27.zip');
 });
 
 test('fetchLatestPublishedVersion falls through 404 releases to highest tag', async () => {
@@ -123,7 +123,7 @@ test('fetchLatestPublishedVersion reads default-branch manifest when no tags', a
   const remote = await fetchLatestPublishedVersion(fetchFn);
   assert.equal(remote.version, '0.2.26');
   assert.equal(remote.source, 'manifest');
-  assert.equal(remote.zipUrl, 'https://github.com/Republic-of-Grip/gaf/archive/refs/heads/main.zip');
+  assert.equal(remote.zipUrl, 'https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip');
 });
 
 test('checkForUpdates shows Update only when remote is newer', async () => {
@@ -223,7 +223,7 @@ test('bindUpdateControls checks, shows Update only when newer, and applies on cl
         status: 'available',
         installed,
         remote: '0.2.27',
-        zipUrl: 'https://github.com/Republic-of-Grip/gaf/archive/refs/heads/main.zip',
+        zipUrl: 'https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip',
       };
     },
   });
@@ -240,7 +240,7 @@ test('bindUpdateControls checks, shows Update only when newer, and applies on cl
   await ui.runUpdate();
   assert.equal(status.textContent, UPDATE_APPLY_HINT);
   assert.deepEqual(opened, [
-    'https://github.com/Republic-of-Grip/gaf/archive/refs/heads/main.zip',
+    'https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip',
     'chrome://extensions',
   ]);
 });
