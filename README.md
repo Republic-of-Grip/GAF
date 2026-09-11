@@ -104,20 +104,20 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.29+:** popup/options **Check for updates** → **Install update** copies the GitHub zip over your unpacked GAF folder (first time: pick the folder that contains `manifest.json`) and reloads this browser profile. Helium still cannot silently write into an unpacked install without that folder grant.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
-GAF is distributed as an **unpacked** folder (`Load unpacked` or Helium `--load-extension`), not a Chrome Web Store / `update_url` CRX. Chromium on Windows will not auto-install a self-hosted CRX, and an extension cannot overwrite its own load path without you granting that directory.
+GAF is an **unpacked** install (`Load unpacked` or Helium `--load-extension`). Chromium has no silent self-update for that, and Windows will not sideload a self-hosted CRX via `update_url`.
 
 | Step | What happens |
 |------|----------------|
-| **Check for updates** | Reads GitHub releases/tags/`manifest.json`. Does not download the zip. |
-| **Install update** (remembered folder) | Downloads the GitHub source zip, writes it over that folder, calls `chrome.runtime.reload()`. |
-| **Install update** (first time) | Same, after a one-time folder picker. Pick the same folder you loaded unpacked. |
-| **Download zip instead** | Last-resort manual path: extract over the GAF folder, then **Reload** on `helium://extensions` / `chrome://extensions`. |
+| **Check for updates** | Reads GitHub releases/tags/`manifest.json`. |
+| **Update** | Downloads the GitHub source zip into the existing GAF folder (first time: pick that same folder so the files can be written). |
+| **Extensions → Reload** | The one remaining step. On the GAF card click **Reload** (developer mode). Helium/Chrome may also show an **Update** control on that page — use the GAF card **Reload** so unpacked files on disk are picked up. Do not Load unpacked again. |
+| **Download zip only** | Fallback: extract the zip **over** the existing GAF folder, then the same Reload. Still not a new Load unpacked. |
 
-`chrome.runtime.reload()` only refreshes GAF in **this** profile. If daily Helium and Helium GAF Debug both load the same folder, the other profile still needs Reload (or a debug restart) to pick up the new files.
+If daily Helium and Helium GAF Debug both use the same folder, Reload (or restart debug) in each profile that is already running.
 
 ### Helium GAF Debug mode (recommended for automation)
 
@@ -166,7 +166,7 @@ gaf/
       storage.mjs
     popup/
     options/
-    update/               # unpacked installer (GitHub zip → folder → reload)
+    update/               # download GitHub zip into the existing unpacked folder
   tests/
 ```
 
@@ -176,7 +176,7 @@ Settings are stored locally and mirrored, best-effort, to `chrome.storage.sync`.
 
 The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records stay in `chrome.storage.session`. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes. Review these before sharing them or attaching them to public issues.
 
-No analytics or remotely downloaded filter rules. **Check for updates** contacts GitHub for version metadata. **Install update** downloads the published GAF source ZIP from GitHub and, after you choose or reuse your unpacked GAF folder, writes those files over that folder and reloads the extension. That is user-initiated extension code from this repository, not remote filter rules.
+No analytics or remotely downloaded filter rules. **Check for updates** contacts GitHub for version metadata. **Update** downloads the published GAF source ZIP from GitHub into your existing unpacked folder. Applying it is the Extensions-page **Reload** on the GAF card. That is user-initiated extension code from this repository, not remote filter rules.
 
 ## Roadmap
 

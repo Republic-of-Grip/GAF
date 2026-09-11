@@ -122,7 +122,7 @@ test('prepareZipEntries drops traversal and keeps GAF files', async () => {
   );
 });
 
-test('applyUnpackedUpdate writes the zip over the unpacked folder and reloads', async () => {
+test('applyUnpackedUpdate writes the zip over the unpacked folder', async () => {
   const zip = buildZip([
     { path: 'GAF-main/manifest.json', data: SAMPLE_GAF_MANIFEST },
     { path: 'GAF-main/src/core/hello.mjs', data: 'export const hello = true;\n' },
@@ -136,19 +136,19 @@ test('applyUnpackedUpdate writes the zip over the unpacked folder and reloads', 
     }),
     'src/core/hello.mjs': 'export const hello = false;\n',
   });
-  let reloads = 0;
+  let applied = 0;
   const result = await applyUnpackedUpdate({
     zipUrl: ZIP_URL,
     expectedVersion: '0.2.29',
     fetch: async () => zipResponse(zip),
     handleStore: createMemoryHandleStore(dir),
-    reload: async () => {
-      reloads += 1;
+    afterApply: async () => {
+      applied += 1;
     },
   });
   assert.equal(result.status, 'applied');
   assert.equal(result.version, '0.2.29');
-  assert.equal(reloads, 1);
+  assert.equal(applied, 1);
   assert.match(await readMemoryFile(dir, 'manifest.json'), /0\.2\.29/);
   assert.equal(await readMemoryFile(dir, 'src/core/hello.mjs'), 'export const hello = true;\n');
 });
@@ -188,7 +188,7 @@ test('applyUnpackedUpdate reuses a picker result and stores it', async () => {
       picks += 1;
       return dir;
     },
-    reload: async () => {},
+    afterApply: async () => {},
   });
   assert.equal(result.version, '0.2.29');
   assert.equal(picks, 1);

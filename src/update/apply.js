@@ -1,4 +1,4 @@
-import { extensionsPageUrl, MANUAL_APPLY_HINT } from '../core/updates.mjs';
+import { extensionsPageUrl, EXTENSIONS_RELOAD_HINT, MANUAL_APPLY_HINT } from '../core/updates.mjs';
 import {
   applyUnpackedUpdate,
   CANCELLED,
@@ -29,9 +29,29 @@ function pickGafDirectory() {
   });
 }
 
-async function openFallback() {
+function extensionsUrl() {
+  return extensionsPageUrl(navigator.userAgent || '');
+}
+
+async function openExtensionsPage() {
+  await chrome.tabs.create({ url: extensionsUrl() });
+}
+
+function showReadyForReload() {
+  const installBtn = $('install');
+  const openBtn = $('openExtensions');
+  if (installBtn) installBtn.hidden = true;
+  if (openBtn) {
+    openBtn.hidden = false;
+    openBtn.focus();
+  }
+  setStatus(EXTENSIONS_RELOAD_HINT);
+}
+
+async function openZipFallback() {
   if (zipUrl) await chrome.tabs.create({ url: zipUrl });
-  await chrome.tabs.create({ url: extensionsPageUrl(navigator.userAgent || '') });
+  await openExtensionsPage();
+  setStatus(MANUAL_APPLY_HINT);
 }
 
 async function install({ allowPicker }) {
@@ -44,12 +64,13 @@ async function install({ allowPicker }) {
       expectedVersion: version,
       handleStore,
       pickDirectory: allowPicker ? pickGafDirectory : undefined,
-      reload: async () => {
-        setStatus(`Installed ${version || 'the update'}. Reloading GAF…`);
-        chrome.runtime.reload();
+      afterApply: async () => {
+        showReadyForReload();
+        await openExtensionsPage();
       },
     });
-    setStatus(`Installed ${result.version}. Reloading GAF…`);
+    showReadyForReload();
+    return result;
   } catch (err) {
     if (installBtn) installBtn.disabled = false;
     if (err?.code === NEED_DIRECTORY) {
@@ -57,13 +78,12 @@ async function install({ allowPicker }) {
       return err;
     }
     if (err?.code === CANCELLED || err?.name === 'AbortError') {
-      setStatus('Folder selection was cancelled. Nothing was installed.');
+      setStatus('Folder selection was cancelled. Nothing was downloaded.');
       return err;
     }
     setStatus(err?.message || String(err));
     return err;
   }
-  return null;
 }
 
 function showManualFallback(message) {
@@ -78,7 +98,10 @@ async function init() {
   }
 
   $('fallbackDownload')?.addEventListener('click', () => {
-    openFallback().catch((err) => setStatus(err?.message || String(err)));
+    openZipFallback().catch((err) => setStatus(err?.message || String(err)));
+  });
+  $('openExtensions')?.addEventListener('click', () => {
+    openExtensionsPage().catch((err) => setStatus(err?.message || String(err)));
   });
   $('install')?.addEventListener('click', () => {
     install({ allowPicker: true }).catch((err) => setStatus(err?.message || String(err)));
@@ -87,14 +110,15 @@ async function init() {
   if (!isTrustedGafZipUrl(zipUrl)) {
     showManualFallback(
       zipUrl
-        ? 'This installer only accepts the official GAF GitHub ZIP.'
-        : 'Missing update ZIP. Use Check for updates, then Install update.'
+        ? 'This download only accepts the official GAF GitHub ZIP.'
+        : 'Missing update ZIP. Use Check for updates, then Update.'
     );
     return;
   }
 
   if (!fileSystemAccessAvailable()) {
     showManualFallback(MANUAL_APPLY_HINT);
+    await openZipFallback();
     return;
   }
 
@@ -102,7 +126,7 @@ async function init() {
   if (err?.code === NEED_DIRECTORY) {
     setStatus(
       version
-        ? `Install GAF ${version} into the unpacked folder Helium is using. You pick that folder once; later updates can reuse it.`
+        ? `Download GAF ${version} into the folder Helium is already using. You pick that folder once so later updates can land there. Then Reload on Extensions — do not Load unpacked again.`
         : PICK_FOLDER_HINT
     );
   }

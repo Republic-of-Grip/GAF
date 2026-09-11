@@ -3,24 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Install GAF update</title>
+    <title>GAF update</title>
     <link rel="stylesheet" href="apply.css" />
   </head>
   <body>
     <main class="card">
       <p class="eyebrow">GAF update</p>
-      <h1>Install into Helium</h1>
+      <h1>Download, then Reload</h1>
       <p class="lead" id="fromTo"></p>
-      <p id="status" class="status" role="status" aria-live="polite">Preparing installer…</p>
+      <p id="status" class="status" role="status" aria-live="polite">Preparing download…</p>
       <div class="actions">
-        <button type="button" id="install" class="btn primary">Install update</button>
-        <button type="button" id="fallbackDownload" class="btn">Download zip instead</button>
+        <button type="button" id="install" class="btn primary">Download update</button>
+        <button type="button" id="openExtensions" class="btn primary" hidden>Open Extensions</button>
+        <button type="button" id="fallbackDownload" class="btn">Download zip only</button>
       </div>
       <p class="hint">
-        Chromium will not silently replace an unpacked extension. First install asks you to pick
-        the same GAF folder you used with <strong>Load unpacked</strong> (it contains
-        <code>manifest.json</code>). After that, Install update can reuse the folder and reload GAF
-        in this Helium profile.
+        GAF is already loaded unpacked. This download replaces files in that same folder.
+        Then open <strong>Extensions</strong> and click <strong>Reload</strong> on the GAF card.
+        Do <strong>not</strong> Load unpacked again.
       </p>
     </main>
     <script type="module" src="apply.js"></script>

@@ -174,7 +174,7 @@ test('checkForUpdates reports a plain GitHub failure', async () => {
 test('formatUpdateStatus hides Update copy when current or failed', () => {
   assert.equal(
     formatUpdateStatus({ status: 'available', installed: '0.2.26', remote: '0.2.27' }),
-    'A newer version is available: 0.2.26 → 0.2.27. Click Install update to load it into Helium.'
+    'A newer version is available: 0.2.26 → 0.2.27. Click Update to download it, then Reload GAF on the Extensions page.'
   );
   assert.equal(
     formatUpdateStatus({ status: 'current', installed: '0.2.26' }),
@@ -252,7 +252,7 @@ test('bindUpdateControls checks, shows Update only when newer, and applies on cl
   assert.equal(available.status, 'available');
   assert.equal(
     status.textContent,
-    'A newer version is available: 0.2.26 → 0.2.27. Click Install update to load it into Helium.'
+    'A newer version is available: 0.2.26 → 0.2.27. Click Update to download it, then Reload GAF on the Extensions page.'
   );
   assert.equal(updateButton.hidden, false);
 

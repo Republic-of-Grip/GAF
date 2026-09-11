@@ -3,19 +3,23 @@
  *
  * This repo versions itself in manifest.json (and package.json). Releases/tags
  * are preferred when they exist; otherwise we read the default-branch manifest.
- * Update is always user-initiated. Helium/Chromium will not silently replace an
- * unpacked Load-unpacked install, so Install update writes the GitHub zip over
- * the folder you grant (File System Access) and then reloads GAF.
+ * Update is always user-initiated. Chromium will not silently replace an
+ * unpacked install, so Update downloads the GitHub zip into the existing GAF
+ * folder, then leaves one step: Reload on the Extensions page. Never Load
+ * unpacked again for an update.
  */
 
 export const GITHUB_OWNER = 'Republic-of-Grip';
 export const GITHUB_REPO = 'GAF';
 export const GITHUB_DEFAULT_BRANCH = 'main';
 
-export const UPDATE_APPLY_HINT = 'Opening the installer…';
+export const UPDATE_APPLY_HINT = 'Opening the update download…';
+
+export const EXTENSIONS_RELOAD_HINT =
+  'Update files are in place. Open Extensions and click Reload on the GAF card. Do not Load unpacked again.';
 
 export const MANUAL_APPLY_HINT =
-  'Helium cannot silently replace an unpacked extension. Download the zip, extract it over the GAF folder you loaded unpacked, then click Reload on the Extensions page.';
+  'Download the zip, extract it over your existing GAF folder (replace files), then click Reload on the GAF card in Extensions. Do not Load unpacked again.';
 
 const API_HEADERS = {
   Accept: 'application/vnd.github+json',
@@ -77,7 +81,7 @@ export function formatUpdateStatus(result) {
     return result?.error || 'Could not check GitHub for a newer GAF version.';
   }
   if (result.status === 'available') {
-    return `A newer version is available: ${result.installed} → ${result.remote}. Click Install update to load it into Helium.`;
+    return `A newer version is available: ${result.installed} → ${result.remote}. Click Update to download it, then Reload GAF on the Extensions page.`;
   }
   return `You're on the latest version (${result.installed}).`;
 }

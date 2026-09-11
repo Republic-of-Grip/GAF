@@ -1,11 +1,10 @@
 /**
- * Apply a GitHub GAF zip over the unpacked folder Helium/Chromium loaded,
- * then reload the extension.
+ * Download a GitHub GAF zip over the unpacked folder Helium already loaded.
  *
- * Chromium cannot write into an unpacked install dir by itself, and Windows
- * Helium will not sideload a self-hosted CRX via update_url. The File System
- * Access picker (remembered after the first grant) is the most automatic path
- * that still works for Load unpacked / --load-extension.
+ * Chromium will not silently replace that folder, and Windows Helium will not
+ * sideload a self-hosted CRX via update_url. After files are on disk, the user
+ * clicks Reload on the Extensions page (the one remaining step). This is not
+ * Load unpacked again.
  */
 
 import { compareVersions, normalizeVersion } from './updates.mjs';
@@ -22,7 +21,7 @@ export const NEED_DIRECTORY = 'NEED_DIRECTORY';
 export const CANCELLED = 'CANCELLED';
 
 export const PICK_FOLDER_HINT =
-  'Choose the GAF folder Helium loaded (the one that contains manifest.json). GAF will copy the new files into that folder and reload.';
+  'Choose the GAF folder Helium is already using (it contains manifest.json). That lets the download replace files in place — it is not Load unpacked.';
 
 export function fileSystemAccessAvailable(globalObj = globalThis) {
   return typeof globalObj.showDirectoryPicker === 'function';
@@ -314,7 +313,7 @@ export function manifestFromEntries(entries) {
 }
 
 /**
- * Download the published zip, write it over the unpacked GAF folder, reload.
+ * Download the published zip and write it over the unpacked GAF folder.
  */
 export async function applyUnpackedUpdate({
   zipUrl,
@@ -322,7 +321,7 @@ export async function applyUnpackedUpdate({
   fetch: fetchFn = globalThis.fetch,
   handleStore,
   pickDirectory,
-  reload,
+  afterApply,
   unzip = unzipArrayBuffer,
 } = {}) {
   if (!isTrustedGafZipUrl(zipUrl)) {
@@ -339,8 +338,8 @@ export async function applyUnpackedUpdate({
   if (normalizeVersion(written.version) !== version) {
     throw new Error('The update did not write the new GAF version to disk.');
   }
-  if (typeof reload === 'function') {
-    await reload();
+  if (typeof afterApply === 'function') {
+    await afterApply({ version });
   }
   return { status: 'applied', version, name: manifest.name };
 }

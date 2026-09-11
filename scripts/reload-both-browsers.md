@@ -10,7 +10,7 @@ Always loads unpacked from disk via:
 powershell -ExecutionPolicy Bypass -File ./reload-gaf-debug.ps1
 ```
 
-Or use GAF **Install update** in the profile you want refreshed: it writes the GitHub zip over the unpacked folder and reloads that profile. The other profile still needs Reload (or this debug restart) if it was already running.
+Or use GAF **Update** in the profile you want refreshed: it downloads the GitHub zip into the unpacked folder, then you **Reload** GAF on `helium://extensions`. Do not Load unpacked again. The other profile still needs Reload (or this debug restart) if it was already running.
 
 ## Daily Helium (normal browsing)
 
