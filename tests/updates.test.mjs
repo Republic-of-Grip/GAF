@@ -17,6 +17,7 @@ import {
   openUpdate,
   bindUpdateControls,
   UPDATE_APPLY_HINT,
+  MANUAL_APPLY_HINT,
   GITHUB_OWNER,
   GITHUB_REPO,
 } from '../src/core/updates.mjs';
@@ -173,7 +174,7 @@ test('checkForUpdates reports a plain GitHub failure', async () => {
 test('formatUpdateStatus hides Update copy when current or failed', () => {
   assert.equal(
     formatUpdateStatus({ status: 'available', installed: '0.2.26', remote: '0.2.27' }),
-    'A newer version is available: 0.2.26 → 0.2.27.'
+    'A newer version is available: 0.2.26 → 0.2.27. Click Update to download it, then Reload GAF on the Extensions page.'
   );
   assert.equal(
     formatUpdateStatus({ status: 'current', installed: '0.2.26' }),
@@ -192,7 +193,20 @@ test('isOfflineError and updateCheckErrorMessage', () => {
   assert.equal(updateCheckErrorMessage(new Error('500')), 'Could not check GitHub for a newer GAF version.');
 });
 
-test('openUpdate opens the zip then the extensions page', async () => {
+test('openUpdate opens the apply page when provided', async () => {
+  const opened = [];
+  await openUpdate(
+    { zipUrl: 'https://example.test/gaf.zip', updateUrl: 'https://example.test/gaf' },
+    {
+      openUrl: async (url) => opened.push(url),
+      extensionsUrl: 'chrome://extensions',
+      applyUrl: 'chrome-extension://id/src/update/apply.html?version=0.2.29',
+    }
+  );
+  assert.deepEqual(opened, ['chrome-extension://id/src/update/apply.html?version=0.2.29']);
+});
+
+test('openUpdate falls back to zip then the extensions page', async () => {
   const opened = [];
   await openUpdate(
     { zipUrl: 'https://example.test/gaf.zip', updateUrl: 'https://example.test/gaf' },
@@ -216,6 +230,8 @@ test('bindUpdateControls checks, shows Update only when newer, and applies on cl
     getInstalledVersion: () => '0.2.26',
     openUrl: async (url) => opened.push(url),
     getExtensionsPageUrl: () => 'chrome://extensions',
+    getApplyPageUrl: (result) =>
+      `chrome-extension://id/src/update/apply.html?version=${result.remote}&zip=${result.zipUrl}`,
     check: async ({ installed }) => {
       checks += 1;
       assert.equal(installed, '0.2.26');
@@ -234,14 +250,16 @@ test('bindUpdateControls checks, shows Update only when newer, and applies on cl
   const available = await ui.runCheck();
   assert.equal(checks, 1);
   assert.equal(available.status, 'available');
-  assert.equal(status.textContent, 'A newer version is available: 0.2.26 → 0.2.27.');
+  assert.equal(
+    status.textContent,
+    'A newer version is available: 0.2.26 → 0.2.27. Click Update to download it, then Reload GAF on the Extensions page.'
+  );
   assert.equal(updateButton.hidden, false);
 
   await ui.runUpdate();
   assert.equal(status.textContent, UPDATE_APPLY_HINT);
   assert.deepEqual(opened, [
-    'https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip',
-    'chrome://extensions',
+    'chrome-extension://id/src/update/apply.html?version=0.2.27&zip=https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip',
   ]);
 });
 
@@ -259,4 +277,31 @@ test('bindUpdateControls keeps Update hidden when already current', async () => 
   await ui.runCheck();
   assert.equal(status.textContent, "You're on the latest version (0.2.26).");
   assert.equal(updateButton.hidden, true);
+});
+
+test('bindUpdateControls zip fallback keeps the manual extract/reload path', async () => {
+  const status = { textContent: '' };
+  const updateButton = { hidden: true, addEventListener() {} };
+  const opened = [];
+  const ui = bindUpdateControls({
+    checkButton: { addEventListener() {} },
+    updateButton,
+    statusElement: status,
+    getInstalledVersion: () => '0.2.26',
+    openUrl: async (url) => opened.push(url),
+    getExtensionsPageUrl: () => 'chrome://extensions',
+    check: async () => ({
+      status: 'available',
+      installed: '0.2.26',
+      remote: '0.2.27',
+      zipUrl: 'https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip',
+    }),
+  });
+  await ui.runCheck();
+  await ui.runUpdate();
+  assert.equal(status.textContent, MANUAL_APPLY_HINT);
+  assert.deepEqual(opened, [
+    'https://github.com/Republic-of-Grip/GAF/archive/refs/heads/main.zip',
+    'chrome://extensions',
+  ]);
 });

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GAF update</title>
+    <link rel="stylesheet" href="apply.css" />
+  </head>
+  <body>
+    <main class="card">
+      <p class="eyebrow">GAF update</p>
+      <h1>Download, then Reload</h1>
+      <p class="lead" id="fromTo"></p>
+      <p id="status" class="status" role="status" aria-live="polite">Preparing download…</p>
+      <div class="actions">
+        <button type="button" id="install" class="btn primary">Download update</button>
+        <button type="button" id="openExtensions" class="btn primary" hidden>Open Extensions</button>
+        <button type="button" id="fallbackDownload" class="btn">Download zip only</button>
+      </div>
+      <p class="hint">
+        GAF is already loaded unpacked. This download replaces files in that same folder.
+        Then open <strong>Extensions</strong> and click <strong>Reload</strong> on the GAF card.
+        Do <strong>not</strong> Load unpacked again.
+      </p>
+    </main>
+    <script type="module" src="apply.js"></script>
+  </body>
+</html>

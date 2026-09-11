@@ -10,7 +10,7 @@ Always loads unpacked from disk via:
 powershell -ExecutionPolicy Bypass -File ./reload-gaf-debug.ps1
 ```
 
-Or desktop **Helium GAF Debug** shortcut. Restart picks up every code change.
+Or use GAF **Update** in the profile you want refreshed: it downloads the GitHub zip into the unpacked folder, then you **Reload** GAF on `helium://extensions`. Do not Load unpacked again. The other profile still needs Reload (or this debug restart) if it was already running.
 
 ## Daily Helium (normal browsing)
 
