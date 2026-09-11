@@ -24,14 +24,24 @@ function findEocdOffset(u8) {
 }
 
 async function inflateRaw(bytes) {
+  // Helium/Chrome support deflate-raw. Node 18 advertises DecompressionStream
+  // but rejects that format; fall through to zlib there.
   if (typeof DecompressionStream === 'function') {
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+    try {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    } catch {
+      /* try zlib */
+    }
   }
-  const zlib = await import('node:zlib');
-  const { promisify } = await import('node:util');
-  const inflated = await promisify(zlib.inflateRaw)(bytes);
-  return inflated instanceof Uint8Array ? inflated : new Uint8Array(inflated);
+  try {
+    const zlib = await import('node:zlib');
+    const { promisify } = await import('node:util');
+    const inflated = await promisify(zlib.inflateRaw)(bytes);
+    return inflated instanceof Uint8Array ? inflated : new Uint8Array(inflated);
+  } catch {
+    throw new Error('The download ZIP uses an unsupported compression method.');
+  }
 }
 
 function decodePath(bytes, utf8) {

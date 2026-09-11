@@ -28,6 +28,29 @@ test('unzipArrayBuffer inflates deflate entries', async () => {
   assert.equal(new TextDecoder().decode(readme.bytes), 'hello from deflate '.repeat(20));
 });
 
+test('unzipArrayBuffer inflates when DecompressionStream rejects deflate-raw', async () => {
+  const original = globalThis.DecompressionStream;
+  globalThis.DecompressionStream = class {
+    constructor(format) {
+      throw new TypeError(`The argument 'format' is invalid. Received '${format}'`);
+    }
+  };
+  try {
+    const zip = buildZip(
+      [{ path: 'GAF-0.2.29/readme.txt', data: 'hello from deflate '.repeat(8) }],
+      { method: 'deflate' }
+    );
+    const entries = stripArchiveRoot(await unzipArrayBuffer(zip));
+    assert.equal(
+      new TextDecoder().decode(entries.find((e) => e.path === 'readme.txt').bytes),
+      'hello from deflate '.repeat(8)
+    );
+  } finally {
+    if (original) globalThis.DecompressionStream = original;
+    else delete globalThis.DecompressionStream;
+  }
+});
+
 test('isSafeZipPath rejects traversal and .git', () => {
   assert.equal(isSafeZipPath('manifest.json'), true);
   assert.equal(isSafeZipPath('src/core/updates.mjs'), true);
