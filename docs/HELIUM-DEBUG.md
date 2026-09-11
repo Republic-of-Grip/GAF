@@ -90,6 +90,8 @@ If GAF is missing from `helium://extensions`:
 2. **Load unpacked** → the folder that contains `manifest.json`
 3. Reload after code changes (or restart this debug Helium)
 
+**Install update** from the GAF popup writes new files into that same unpacked folder (after you grant it once) and reloads GAF in the profile where you clicked it. Daily Helium still needs its own Reload if that window was already running.
+
 Daily Helium keeps its own extension list; reload GAF there separately when you want it for normal browsing.
 
 ## Safety notes

@@ -24,6 +24,7 @@ import {
   updateArchiveEntry,
 } from '../core/hide-from-archive.mjs';
 import { bindUpdateControls, readInstalledVersion, extensionsPageUrl } from '../core/updates.mjs';
+import { buildApplyPageUrl, openApplyUi } from '../core/apply-update.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -384,7 +385,8 @@ function setupUpdates() {
     statusElement: $('updateStatus'),
     installedVersionElements: [$('installedEyebrow'), $('installedVersion'), $('footerVersion')],
     getInstalledVersion: readInstalledVersion,
-    openUrl: (url) => chrome.tabs.create({ url }),
+    openUrl: (url) => openApplyUi(url),
+    getApplyPageUrl: (result) => buildApplyPageUrl(result, (path) => chrome.runtime.getURL(path)),
     getExtensionsPageUrl: () => extensionsPageUrl(navigator.userAgent || ''),
   });
 }

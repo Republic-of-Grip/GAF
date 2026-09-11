@@ -104,7 +104,20 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2).
+Reload the extension after upgrades (0.1 → 0.2). **0.2.29+:** popup/options **Check for updates** → **Install update** copies the GitHub zip over your unpacked GAF folder (first time: pick the folder that contains `manifest.json`) and reloads this browser profile. Helium still cannot silently write into an unpacked install without that folder grant.
+
+## Updates
+
+GAF is distributed as an **unpacked** folder (`Load unpacked` or Helium `--load-extension`), not a Chrome Web Store / `update_url` CRX. Chromium on Windows will not auto-install a self-hosted CRX, and an extension cannot overwrite its own load path without you granting that directory.
+
+| Step | What happens |
+|------|----------------|
+| **Check for updates** | Reads GitHub releases/tags/`manifest.json`. Does not download the zip. |
+| **Install update** (remembered folder) | Downloads the GitHub source zip, writes it over that folder, calls `chrome.runtime.reload()`. |
+| **Install update** (first time) | Same, after a one-time folder picker. Pick the same folder you loaded unpacked. |
+| **Download zip instead** | Last-resort manual path: extract over the GAF folder, then **Reload** on `helium://extensions` / `chrome://extensions`. |
+
+`chrome.runtime.reload()` only refreshes GAF in **this** profile. If daily Helium and Helium GAF Debug both load the same folder, the other profile still needs Reload (or a debug restart) to pick up the new files.
 
 ### Helium GAF Debug mode (recommended for automation)
 
@@ -153,6 +166,7 @@ gaf/
       storage.mjs
     popup/
     options/
+    update/               # unpacked installer (GitHub zip → folder → reload)
   tests/
 ```
 
@@ -162,7 +176,7 @@ Settings are stored locally and mirrored, best-effort, to `chrome.storage.sync`.
 
 The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records stay in `chrome.storage.session`. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes. Review these before sharing them or attaching them to public issues.
 
-No analytics or remotely downloaded filter rules. The **Check for updates** button contacts GitHub for version metadata, and **Update** opens a GitHub ZIP download. Neither installs or executes downloaded code automatically.
+No analytics or remotely downloaded filter rules. **Check for updates** contacts GitHub for version metadata. **Install update** downloads the published GAF source ZIP from GitHub and, after you choose or reuse your unpacked GAF folder, writes those files over that folder and reloads the extension. That is user-initiated extension code from this repository, not remote filter rules.
 
 ## Roadmap
 

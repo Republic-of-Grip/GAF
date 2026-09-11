@@ -3,6 +3,7 @@ import { loadSettings, saveSettings, loadExclusions, verifySettingsEnabled } fro
 import { findExclusionForHost, removeExclusion, activeExclusionHosts } from '../core/exclusions.mjs';
 import { paintActionBadge, isBadgeOn } from '../core/badge.mjs';
 import { bindUpdateControls, readInstalledVersion, extensionsPageUrl } from '../core/updates.mjs';
+import { buildApplyPageUrl, openApplyUi } from '../core/apply-update.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -373,7 +374,8 @@ async function init() {
     updateButton: $('applyUpdate'),
     statusElement: $('updateStatus'),
     getInstalledVersion: readInstalledVersion,
-    openUrl: (url) => chrome.tabs.create({ url }),
+    openUrl: (url) => openApplyUi(url),
+    getApplyPageUrl: (result) => buildApplyPageUrl(result, (path) => chrome.runtime.getURL(path)),
     getExtensionsPageUrl: () => extensionsPageUrl(navigator.userAgent || ''),
   });
 }

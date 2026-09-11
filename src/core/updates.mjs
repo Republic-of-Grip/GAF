@@ -3,15 +3,19 @@
  *
  * This repo versions itself in manifest.json (and package.json). Releases/tags
  * are preferred when they exist; otherwise we read the default-branch manifest.
- * Update is always user-initiated — no silent auto-install.
+ * Update is always user-initiated. Helium/Chromium will not silently replace an
+ * unpacked Load-unpacked install, so Install update writes the GitHub zip over
+ * the folder you grant (File System Access) and then reloads GAF.
  */
 
 export const GITHUB_OWNER = 'Republic-of-Grip';
 export const GITHUB_REPO = 'GAF';
 export const GITHUB_DEFAULT_BRANCH = 'main';
 
-export const UPDATE_APPLY_HINT =
-  'Download the zip, extract it over your GAF folder, then click Reload on the Extensions page.';
+export const UPDATE_APPLY_HINT = 'Opening the installer…';
+
+export const MANUAL_APPLY_HINT =
+  'Helium cannot silently replace an unpacked extension. Download the zip, extract it over the GAF folder you loaded unpacked, then click Reload on the Extensions page.';
 
 const API_HEADERS = {
   Accept: 'application/vnd.github+json',
@@ -73,7 +77,7 @@ export function formatUpdateStatus(result) {
     return result?.error || 'Could not check GitHub for a newer GAF version.';
   }
   if (result.status === 'available') {
-    return `A newer version is available: ${result.installed} → ${result.remote}.`;
+    return `A newer version is available: ${result.installed} → ${result.remote}. Click Install update to load it into Helium.`;
   }
   return `You're on the latest version (${result.installed}).`;
 }
@@ -271,9 +275,13 @@ export async function checkForUpdates({
   }
 }
 
-export async function openUpdate(result, { openUrl, extensionsUrl } = {}) {
+export async function openUpdate(result, { openUrl, extensionsUrl, applyUrl } = {}) {
   if (typeof openUrl !== 'function') {
     throw new Error('openUrl is required');
+  }
+  if (applyUrl) {
+    await openUrl(applyUrl);
+    return;
   }
   const target = result?.zipUrl || result?.updateUrl;
   if (target) await openUrl(target);
@@ -291,6 +299,8 @@ export function bindUpdateControls({
   getInstalledVersion,
   openUrl,
   getExtensionsPageUrl = extensionsPageUrl,
+  getApplyPageUrl,
+  startApply,
   check = checkForUpdates,
 } = {}) {
   const installed = normalizeVersion(
@@ -320,10 +330,20 @@ export function bindUpdateControls({
 
   async function runUpdate() {
     if (!lastResult || lastResult.status !== 'available') return lastResult;
-    if (statusElement) statusElement.textContent = UPDATE_APPLY_HINT;
+    if (typeof startApply === 'function') {
+      if (statusElement) statusElement.textContent = UPDATE_APPLY_HINT;
+      await startApply(lastResult);
+      return lastResult;
+    }
+    const applyUrl =
+      typeof getApplyPageUrl === 'function' ? getApplyPageUrl(lastResult) : getApplyPageUrl;
+    if (statusElement) {
+      statusElement.textContent = applyUrl ? UPDATE_APPLY_HINT : MANUAL_APPLY_HINT;
+    }
     await openUpdate(lastResult, {
       openUrl,
       extensionsUrl: typeof getExtensionsPageUrl === 'function' ? getExtensionsPageUrl() : getExtensionsPageUrl,
+      applyUrl,
     });
     return lastResult;
   }
