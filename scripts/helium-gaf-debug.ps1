@@ -9,7 +9,6 @@
     - dedicated user-data-dir
     - --remote-debugging-port (real /json/version CDP)
     - --load-extension for unpacked GAF
-    - --remote-allow-origins=* for browser-use
 
 .PARAMETER Port
   CDP port (default 9333).
@@ -83,7 +82,7 @@ function Write-EnvHelper {
     '# Dot-source before browser-use:'
     '#   . $env:LOCALAPPDATA\Helium-GAF-Debug\set-cdp-env.ps1'
     ('$env:BU_CDP_URL = ''http://127.0.0.1:{0}''' -f $CdpPort)
-    '$env:PATH = ''%USERPROFILE%\.local\bin;'' + $env:PATH'
+    ('$env:PATH = ''{0};'' + $env:PATH' -f (Join-Path $env:USERPROFILE '.local\bin'))
     'Write-Host (''BU_CDP_URL='' + $env:BU_CDP_URL)'
   )
   Set-Content -LiteralPath $Path -Value $lines -Encoding UTF8
@@ -175,7 +174,6 @@ if (-not (Test-Path -LiteralPath $prefsPath)) {
 $argList = New-Object System.Collections.Generic.List[string]
 $argList.Add(('--user-data-dir={0}' -f $UserData))
 $argList.Add(('--remote-debugging-port={0}' -f $Port))
-$argList.Add('--remote-allow-origins=*')
 $argList.Add('--no-first-run')
 $argList.Add('--no-default-browser-check')
 $argList.Add('--disable-features=TranslateUI')
@@ -218,7 +216,7 @@ if ($ok) {
   Write-Host '  Debug Helium  : this window (GAF + CDP)' -ForegroundColor DarkGray
   Write-Host ''
   Write-Host '  browser-use:' -ForegroundColor Cyan
-  Write-Host '    $env:PATH = "%USERPROFILE%\.local\bin;$env:PATH"'
+  Write-Host ('    $env:PATH = "{0};$env:PATH"' -f (Join-Path $env:USERPROFILE '.local\bin'))
   Write-Host ('    $env:BU_CDP_URL = "http://127.0.0.1:{0}"' -f $Port)
   Write-Host '    browser-use --doctor'
   Write-Host ''

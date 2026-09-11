@@ -100,7 +100,7 @@ export const METER_WALL_TEXT_RE =
 export const MIN_ARTICLE_CHARS_FOR_DISARM = 400;
 
 /**
- * SessionStorage key for one auto meter check per top-level URL path.
+ * Page identifier for the extension-owned automatic reset retry guard.
  * Not a single boolean for the whole origin (later articles must still run).
  */
 export function meterAutoStorageKey(pageUrl) {
@@ -148,7 +148,7 @@ export function cookieUrlFromDetails(cookie) {
  */
 export function looksLikeMeterCookieName(name) {
   const n = String(name || '').toLowerCase();
-  if (!n) return false;
+  if (!n || /(?:access|refresh|id)[_-]?token|session|auth|entitlement/.test(n)) return false;
   return METER_NAME_HINTS.some((hint) => n.includes(hint));
 }
 
@@ -178,6 +178,7 @@ export function removeDetailsForCookie(cookie) {
  */
 export function shouldAutoMeterReset(pageUrl, settings, exclusionHosts = [], hints = {}) {
   if (!settings?.meterResetEnabled) return false;
+  if (!resolveSitePolicy(pageUrl, settings, exclusionHosts).active) return false;
   if (settings.features?.meterReset === false) return false;
   if (settings.meterResetMode !== 'auto') return false;
   if (!looksLikeArticlePage(pageUrl)) return false;
@@ -329,6 +330,29 @@ export function measureArticleText(doc) {
   return Math.min(body.length, 20000);
 }
 
+const meterChanges = new WeakMap();
+const METER_STYLE_PROPERTIES = ['display', 'pointer-events', 'visibility'];
+
+/** Undo only properties still carrying the values GAF wrote. */
+export function restoreMeterWall(doc) {
+  const changes = meterChanges.get(doc);
+  if (changes) {
+    for (const [el, saved] of changes) {
+      for (const [property, value, priority] of saved.styles) {
+        const written = property === 'display' ? 'none' : property === 'visibility' ? 'hidden' : 'none';
+        if (el.style?.getPropertyValue?.(property) !== written) continue;
+        if (value) el.style.setProperty(property, value, priority);
+        else el.style.removeProperty(property);
+      }
+      if (saved.active) el.classList?.add?.('active');
+      if (saved.marker == null) el.removeAttribute?.('data-gaf-meter-disarmed');
+      else el.setAttribute('data-gaf-meter-disarmed', saved.marker);
+    }
+    meterChanges.delete(doc);
+  }
+  doc?.getElementById?.('gaf-meter-disarm-style')?.remove?.();
+}
+
 /**
  * Hide / deactivate free-article gate chrome so already-delivered body is readable.
  * Safe when article text is present; no-op-ish when the server never sent the body.
@@ -340,6 +364,8 @@ export function disarmMeterWall(doc) {
   if (!doc?.querySelectorAll) return result;
 
   result.articleChars = measureArticleText(doc);
+  if (!meterChanges.has(doc)) meterChanges.set(doc, new Map());
+  const changes = meterChanges.get(doc);
 
   for (const sel of METER_DISARM_SELECTORS) {
     let nodes;
@@ -349,6 +375,12 @@ export function disarmMeterWall(doc) {
       continue;
     }
     for (const el of nodes) {
+      if (!changes.has(el)) changes.set(el, {
+        active: Boolean(el.classList?.contains?.('active')),
+        marker: el.getAttribute?.('data-gaf-meter-disarmed'),
+        styles: METER_STYLE_PROPERTIES.map((property) => [property,
+          el.style?.getPropertyValue?.(property) || '', el.style?.getPropertyPriority?.(property) || '']),
+      });
       if (el.classList?.contains?.('active')) {
         el.classList.remove('active');
         result.activeRemoved += 1;
@@ -473,6 +505,9 @@ export async function clearCookiesForPageUrl(pageUrl, options = {}) {
   let removed = 0;
   const names = [];
   for (const cookie of collected.values()) {
+    if (options.canProceed && !(await options.canProceed())) {
+      return { ok: false, removed, names, error: 'cancelled' };
+    }
     if (mode === 'meter-names' && !looksLikeMeterCookieName(cookie.name)) {
       continue;
     }

@@ -40,3 +40,34 @@ test('pauses only long infinite decorative loops', () => {
     false
   );
 });
+
+test('OFF resumes only WAAPI and SVG motion that GAF actually paused', async () => {
+  const { pauseAllScriptedMotion, restoreScriptedMotion } = await import('../src/core/scripted-motion.mjs');
+  const running = fakeAnim();
+  const paused = fakeAnim({ playState: 'paused' });
+  let plays = 0;
+  for (const a of [running, paused]) {
+    a.pause = () => { a.playState = 'paused'; };
+    a.play = () => { a.playState = 'running'; plays += 1; };
+  }
+  let svgPaused = false, svgResumes = 0;
+  const svg = {
+    querySelector: () => null, closest: () => null,
+    animationsPaused: () => svgPaused,
+    pauseAnimations: () => { svgPaused = true; },
+    unpauseAnimations: () => { svgPaused = false; svgResumes += 1; },
+  };
+  const doc = {
+    getAnimations: () => [running, paused],
+    querySelectorAll: (sel) => sel === 'svg' ? [svg] : [],
+  };
+  pauseAllScriptedMotion(doc);
+  pauseAllScriptedMotion(doc);
+  assert.equal(running.playState, 'paused');
+  restoreScriptedMotion(doc);
+  restoreScriptedMotion(doc);
+  assert.equal(running.playState, 'running');
+  assert.equal(paused.playState, 'paused');
+  assert.equal(plays, 1);
+  assert.equal(svgResumes, 1);
+});

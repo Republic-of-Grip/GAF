@@ -90,7 +90,7 @@ async function applyAll() {
   const url = pageUrl();
   if (url !== lastUrl) {
     unstickPasses = 0;
-    meterDisarmScheduledFor = '';
+    cancelMeterHandling();
   }
   lastUrl = url;
 
@@ -98,6 +98,9 @@ async function applyAll() {
 
   if (!site.active) {
     stopUnstickWatch();
+    cancelMeterHandling();
+    core.restoreMeterWall(document);
+    core.restoreScriptedMotion(document);
     core.removeMotionStyle(document);
     core.removeHideStyle(document);
     core.removeSiteCss(document);
@@ -162,6 +165,7 @@ async function applyAll() {
     startScriptedLoop();
   } else {
     stopScriptedLoop();
+    core.restoreScriptedMotion(document);
   }
 
   // Snapshot only when time freeze is actually active on this page
@@ -191,6 +195,25 @@ async function applyAll() {
 const METER_DISARM_DELAYS_MS = [0, 400, 1200, 3000, 6000];
 let meterDisarmScheduledFor = '';
 const meterAutoScheduled = new Set();
+const meterTimers = new Set();
+let meterGeneration = 0;
+
+function cancelMeterHandling() {
+  meterGeneration += 1;
+  for (const timer of meterTimers) clearTimeout(timer);
+  meterTimers.clear();
+  meterAutoScheduled.clear();
+  meterDisarmScheduledFor = '';
+}
+
+function scheduleMeterTask(callback, delay) {
+  const generation = meterGeneration;
+  const timer = setTimeout(() => {
+    meterTimers.delete(timer);
+    if (generation === meterGeneration) callback();
+  }, delay);
+  meterTimers.add(timer);
+}
 
 /**
  * Hide free-article gate chrome when body is already in the DOM (Spiked pattern).
@@ -215,96 +238,44 @@ function maybeDisarmMeter(core, s, url) {
   }
 }
 
-/**
- * Auto meter pipeline:
- * 1) Multi-pass DOM disarm (works even when mode is manual — user wanted automatic)
- * 2) If mode=auto and body still empty after disarm, cookie/storage wipe + reload once
- */
+/** Scheduled actions always consult current settings; the worker owns wipe retries. */
 function scheduleMeterHandling(core, s, url) {
-  if (!s?.meterResetEnabled || s.features?.meterReset === false) return;
-  if (!core.shouldDisarmMeterOnPage(url, s, exclusionHosts) && s.meterResetMode === 'off') {
+  if (window !== window.top) return;
+  if (!core.shouldDisarmMeterOnPage(url, s, exclusionHosts) &&
+      !core.shouldAutoMeterReset(url, s, exclusionHosts)) {
+    cancelMeterHandling();
+    core.restoreMeterWall(document);
     return;
   }
-
-  // Multi-pass disarm on every navigation (not gated on meterResetMode)
   if (meterDisarmScheduledFor !== url && s.meterDisarm !== false) {
     meterDisarmScheduledFor = url;
     for (const delay of METER_DISARM_DELAYS_MS) {
-      setTimeout(() => {
-        try {
-          if (pageUrl() !== url) return;
-          maybeDisarmMeter(core, s, url);
-        } catch {
-          /* ignore */
-        }
+      scheduleMeterTask(() => {
+        if (pageUrl() !== url || !settings) return;
+        maybeDisarmMeter(core, settings, url);
       }, delay);
     }
   }
-
-  // Cookie wipe only in auto mode, once per top-level URL path
-  if (s.meterResetMode !== 'auto') return;
+  if (!core.shouldAutoMeterReset(url, s, exclusionHosts)) return;
   const autoKey = core.meterAutoStorageKey(url);
   if (meterAutoScheduled.has(autoKey)) return;
-  try {
-    if (sessionStorage.getItem(autoKey) === '1') return;
-  } catch {
-    /* private mode */
-  }
-  if (!core.shouldAutoMeterReset(url, s, exclusionHosts)) return;
-
   meterAutoScheduled.add(autoKey);
-  setTimeout(() => {
-    try {
-      if (pageUrl() !== url) return;
-      try {
-        if (sessionStorage.getItem(autoKey) === '1') return;
-      } catch {
-        /* ignore */
-      }
-      const markDone = () => {
-        try {
-          sessionStorage.setItem(autoKey, '1');
-        } catch {
-          /* ignore */
-        }
-      };
-      const disarm = core.disarmMeterWall(document);
-      if (disarm?.useful) {
-        markDone();
-        return;
-      }
-      const hit = core.detectMeterWall(document);
-      const escalate = core.shouldEscalateMeterWipe({
-        strongSelector: hit.strongSelector,
-        selectorHit: hit.selectorHit,
-        textHit: hit.textHit,
-        disarmUseful: false,
-        articleChars: disarm?.articleChars || 0,
-      });
-      if (!escalate) {
-        markDone();
-        return;
-      }
-      markDone();
-      chrome.runtime
-        .sendMessage({
-          type: 'GAF_RESET_METER',
-          url,
-          reload: true,
-          forceReload: true,
-          auto: true,
-        })
-        .catch(() => {});
-    } catch {
-      /* ignore */
-    }
+  scheduleMeterTask(() => {
+    if (pageUrl() !== url || !core.shouldAutoMeterReset(url, settings, exclusionHosts)) return;
+    const disarm = maybeDisarmMeter(core, settings, url);
+    if (disarm?.useful) return;
+    const hit = core.detectMeterWall(document);
+    if (!core.shouldEscalateMeterWipe(hit)) return;
+    chrome.runtime.sendMessage({
+      type: 'GAF_RESET_METER', url, reload: true, forceReload: true, auto: true,
+    }).catch(() => {});
   }, 1500);
 }
 
 /**
  * Clear interaction blockers after load and while the page stays locked:
- * - page-locking first-party cookie walls (ditur Godta valgte / Godta alle)
- * - hard uncover if Alpine ignores the click (hide grey + seed cookie_consent)
+ * - explicit reject-all / necessary-only consent choices
+ * - leave ambiguous consent choices visible for the user
  * - orphan full-viewport dimmers with no usable dialog
  * Leaves login / cart / filter panels alone when not a consent lock.
  */
@@ -561,6 +532,9 @@ function hookHistory() {
 }
 
 function tearDownFiltering(core) {
+  cancelMeterHandling();
+  core.restoreMeterWall(document);
+  core.restoreScriptedMotion(document);
   stopObserver();
   stopUnstickWatch();
   core.removeMotionStyle(document);
@@ -676,69 +650,47 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     return true;
   }
-  if (message?.type === 'GAF_CLEAR_PAGE_STORAGE') {
+  if (['GAF_CLEAR_PAGE_STORAGE', 'GAF_DETECT_METER_WALL', 'GAF_DISARM_METER'].includes(message?.type)) {
     (async () => {
-      try {
+      const core = await loadCore();
+      await refreshState();
+      const url = pageUrl();
+      if (window !== window.top || (message.expectedUrl && message.expectedUrl !== url) ||
+          !core.resolveSitePolicy(url, settings, exclusionHosts).active ||
+          !settings.meterResetEnabled || settings.features?.meterReset === false ||
+          (message.auto && !core.shouldAutoMeterReset(url, settings, exclusionHosts))) {
+        return { ok: false, error: 'inactive-or-page-changed' };
+      }
+      if (message.type === 'GAF_DETECT_METER_WALL') {
+        return { ok: true, ...core.detectMeterWall(document), articleChars: core.measureArticleText(document) };
+      }
+      if (message.type === 'GAF_DISARM_METER') {
+        if (!settings.meterDisarm) return { ok: true, useful: false, articleChars: core.measureArticleText(document) };
+        return { ok: true, ...core.disarmMeterWall(document) };
+      }
+      // Only an explicit worker request bound to this page may clear storage.
+      if (message.auto || !message.expectedUrl) return { ok: false, error: 'manual-only' };
+      if (message.webStorage === true) {
         localStorage.clear();
-      } catch {
-        /* ignore */
-      }
-      try {
         sessionStorage.clear();
-      } catch {
-        /* ignore */
       }
-      // IndexedDB / Cache Storage only when explicitly requested (manual + opted in)
       if (message.durable === true) {
-        try {
-          if (indexedDB?.databases) {
-            const dbs = await indexedDB.databases();
-            await Promise.all(
-              (dbs || []).map(
-                (db) =>
-                  new Promise((resolve) => {
-                    if (!db?.name) return resolve();
-                    const req = indexedDB.deleteDatabase(db.name);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => resolve();
-                    req.onblocked = () => resolve();
-                  })
-              )
-            );
-          }
-        } catch {
-          /* ignore */
+        if (globalThis.indexedDB?.databases) {
+          const dbs = await indexedDB.databases();
+          await Promise.all((dbs || []).filter((db) => db.name).map((db) => new Promise((resolve, reject) => {
+            const req = indexedDB.deleteDatabase(db.name);
+            req.onsuccess = resolve;
+            req.onerror = () => reject(req.error);
+            req.onblocked = () => reject(new Error('Close other tabs for this site before deleting its databases.'));
+          })));
         }
-        try {
-          if (caches?.keys) {
-            const keys = await caches.keys();
-            await Promise.all(keys.map((k) => caches.delete(k)));
-          }
-        } catch {
-          /* ignore */
+        if (globalThis.caches?.keys) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((key) => caches.delete(key)));
         }
       }
-      sendResponse({ ok: true });
-    })();
-    return true;
-  }
-  if (message?.type === 'GAF_DETECT_METER_WALL') {
-    loadCore()
-      .then((core) => {
-        const hit = core.detectMeterWall(document);
-        const chars = core.measureArticleText(document);
-        sendResponse({ ok: true, ...hit, articleChars: chars });
-      })
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
-    return true;
-  }
-  if (message?.type === 'GAF_DISARM_METER') {
-    loadCore()
-      .then((core) => {
-        const result = core.disarmMeterWall(document);
-        sendResponse({ ok: true, ...result });
-      })
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+      return { ok: true };
+    })().then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
     return true;
   }
   return false;

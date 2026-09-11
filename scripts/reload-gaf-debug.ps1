@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
   Restart Helium GAF Debug with latest unpacked GAF from disk.
@@ -6,7 +6,8 @@
 #>
 param([string]$Url = 'about:blank')
 $ErrorActionPreference = 'Stop'
-$GafRoot = '<your-gaf-folder>'
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$GafRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
 $Port = 9333
 $HeliumExe = Join-Path $env:LOCALAPPDATA 'imput\Helium\Application\chrome.exe'
 $UserData = Join-Path $env:LOCALAPPDATA 'Helium-GAF-Debug\User Data'
@@ -32,7 +33,6 @@ New-Item -ItemType Directory -Force -Path $UserData | Out-Null
 $args = @(
   "--user-data-dir=$UserData",
   "--remote-debugging-port=$Port",
-  "--remote-allow-origins=*",
   "--no-first-run",
   "--no-default-browser-check",
   "--password-store=basic",
