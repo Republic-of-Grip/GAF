@@ -17,7 +17,6 @@ This launcher uses:
 
 ```text
 --remote-debugging-port=9333
---remote-allow-origins=*
 --user-data-dir=…\Helium-GAF-Debug\User Data
 --load-extension=<your-gaf-folder>
 ```
@@ -95,6 +94,8 @@ Daily Helium keeps its own extension list; reload GAF there separately when you 
 
 ## Safety notes
 
+- The launcher keeps the default DevTools WebSocket origin restriction. If an automation client reports an origin rejection, identify that client's exact Origin and allow only that value; do not use a wildcard. These scripts have not been live-tested on Windows/Helium for v0.2.28.
+
 - Debug profile has **full automation access** (CDP can read cookies, drive tabs). Only connect trusted tools (`BU_CDP_URL` localhost).
 - Do **not** set `user-data-dir` to your daily profile while CDP is on.
 - You can run **both** profiles at once (two windows, two data dirs).
@@ -129,4 +130,4 @@ Live CDP findings that fed **GAF 0.2.8** interaction-guard:
 - No `cookie_consent` cookie until accept; catalog has products underneath (~34)
 - After accept: scroll unlocks, popup gone, PLP interactive
 
-GAF now auto-dismisses that wall (minimal accept) on load passes and via **Thaw**.
+Historical behaviour: earlier GAF versions clicked “Godta valgte”. Since v0.2.28, ambiguous selected consent is left to the user; only explicit rejection / necessary-only choices are automated.

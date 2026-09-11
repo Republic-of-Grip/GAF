@@ -724,7 +724,7 @@ test('restoreInteractionUnlock clears unstuck markers and force-unlock class', (
 });
 
 /** ditur.no-style cookie wall (live Helium GAF Debug session). */
-function fakeDiturConsentWall() {
+function fakeDiturConsentWall(label = 'Godta valgte') {
   const bodyChildren = [];
   const body = {
     classList: {
@@ -763,7 +763,7 @@ function fakeDiturConsentWall() {
       clicked.labels.push(label);
     },
   });
-  const btnSelected = makeBtn('Godta valgte');
+  const btnSelected = makeBtn(label);
   const btnAll = makeBtn('Godta alle');
 
   const cookiePopup = {
@@ -888,28 +888,28 @@ test('force unstick still leaves usable non-consent settings modal alone', () =>
   assert.notEqual(dimmer.style.display, 'none');
 });
 
-test('findConsentAcceptButton prefers Godta valgte over Godta alle', () => {
-  const { cookiePopup } = fakeDiturConsentWall();
+test('findConsentAcceptButton prefers Kun nødvendige over Godta alle', () => {
+  const { cookiePopup } = fakeDiturConsentWall('Kun nødvendige');
   const hit = findConsentAcceptButton(cookiePopup);
   assert.ok(hit);
-  assert.equal(hit.label, 'Godta valgte');
+  assert.equal(hit.label, 'Kun nødvendige');
   assert.equal(hit.kind, 'minimal');
 });
 
-test('dismissBlockingConsentWall clicks Godta valgte and unlocks body (ditur)', () => {
-  const { doc, body, clicked } = fakeDiturConsentWall();
+test('dismissBlockingConsentWall clicks Kun nødvendige and unlocks body (ditur)', () => {
+  const { doc, body, clicked } = fakeDiturConsentWall('Kun nødvendige');
   const result = dismissBlockingConsentWall(doc, {});
   assert.equal(result.dismissed, true);
-  assert.equal(result.button, 'Godta valgte');
+  assert.equal(result.button, 'Kun nødvendige');
   assert.equal(result.kind, 'minimal');
   assert.equal(result.path, 'isolated');
-  assert.deepEqual(clicked.labels, ['Godta valgte']);
+  assert.deepEqual(clicked.labels, ['Kun nødvendige']);
   assert.equal(body.classList.contains('noscroll'), false);
   assert.equal(body.classList.contains('phantom-scroll-bar'), false);
 });
 
 test('clickConsentControl uses one MAIN-world selector and does not isolated-click', () => {
-  const { cookiePopup, clicked } = fakeDiturConsentWall();
+  const { cookiePopup, clicked } = fakeDiturConsentWall('Kun nødvendige');
   const hit = findConsentAcceptButton(cookiePopup);
   const messages = [];
   const view = {
@@ -1001,20 +1001,20 @@ test('ditur cookie seeding is host-gated', () => {
 });
 
 test('unstickOrphanedOverlays consent-dismissed reason on ditur-style wall', () => {
-  const { doc, greyDimmer, clicked } = fakeDiturConsentWall();
+  const { doc, greyDimmer, clicked } = fakeDiturConsentWall('Kun nødvendige');
   const result = unstickOrphanedOverlays(doc, {});
   assert.ok(
     result.reason === 'consent-dismissed' || result.reason === 'consent-force-uncover',
     `unexpected reason ${result.reason}`,
   );
-  assert.equal(result.consent?.button, 'Godta valgte');
-  assert.ok(clicked.labels.includes('Godta valgte'));
+  assert.equal(result.consent?.button, 'Kun nødvendige');
+  assert.ok(clicked.labels.includes('Kun nødvendige'));
   assert.equal(result.unlocked, true);
   // leftover grey scrim hidden
   assert.equal(greyDimmer.style.display, 'none');
 });
 
-test('findConsentAcceptButton falls back to Godta alle when only full accept exists', () => {
+test('findConsentAcceptButton never falls back to full consent', () => {
   const btn = {
     disabled: false,
     innerText: 'Godta alle',
@@ -1031,8 +1031,7 @@ test('findConsentAcceptButton falls back to Godta alle when only full accept exi
     },
   };
   const hit = findConsentAcceptButton(root);
-  assert.equal(hit?.label, 'Godta alle');
-  assert.equal(hit?.kind, 'full');
+  assert.equal(hit, null);
 });
 
 test('FilterBlade-style ModalBox is not treated as orphan dimmer', () => {
@@ -1074,7 +1073,7 @@ test('FilterBlade-style ModalBox is not treated as orphan dimmer', () => {
   );
 });
 
-test('force-uncover when locked consent has no clickable button', () => {
+test('unresolved consent stays visible even in force mode', () => {
   const { doc, body, greyDimmer, cookiePopup, nodesBySel } = (() => {
     const f = fakeDiturConsentWall();
     // strip buttons so click cannot work
@@ -1082,9 +1081,21 @@ test('force-uncover when locked consent has no clickable button', () => {
     return f;
   })();
   // re-bind document query for cookie root
-  const result = unstickOrphanedOverlays(doc, {});
-  assert.equal(result.reason, 'consent-force-uncover');
-  assert.equal(result.unlocked, true);
-  assert.equal(body.classList.contains('noscroll'), false);
-  assert.equal(greyDimmer.style.display, 'none');
+  const result = unstickOrphanedOverlays(doc, {}, { force: true });
+  assert.equal(result.reason, 'consent-awaiting-user');
+  assert.equal(result.unlocked, false);
+  assert.equal(body.classList.contains('noscroll'), true);
+  assert.notEqual(greyDimmer.style.display, 'none');
+});
+
+test('selected consent is not assumed minimal; keep the wall and choices intact', () => {
+  const { doc, body, greyDimmer, clicked, cookiePopup } = fakeDiturConsentWall();
+  assert.equal(findConsentAcceptButton(cookiePopup), null);
+  const before = doc.cookie;
+  const result = unstickOrphanedOverlays(doc, {}, { force: true });
+  assert.equal(result.reason, 'consent-awaiting-user');
+  assert.deepEqual(clicked.labels, []);
+  assert.equal(body.classList.contains('noscroll'), true);
+  assert.notEqual(greyDimmer.style.display, 'none');
+  assert.equal(doc.cookie, before);
 });

@@ -187,7 +187,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
    * meter-names: only cookies whose names look like meters (default).
    */
   meterResetCookieMode: 'meter-names',
-  /** Also clear localStorage + sessionStorage for the page origin before reload. */
+  /** Manual reset only: clear all localStorage + sessionStorage for this origin. */
   meterResetClearStorage: true,
   /**
    * Manual reset only. Delete IndexedDB databases and Cache Storage.

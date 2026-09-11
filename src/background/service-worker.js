@@ -22,7 +22,7 @@ import {
   activeExclusionHosts,
   normalizeExclusions,
 } from '../core/exclusions.mjs';
-import { clearCookiesForPageUrl } from '../core/meter-reset.mjs';
+import { createMeterResetter } from './meter-actions.mjs';
 import { paintActionBadge, isBadgeOn } from '../core/badge.mjs';
 
 const MENU_ARCHIVE = 'gaf-archive-object';
@@ -120,85 +120,15 @@ function ensureContextMenus() {
   }
 }
 
-/**
- * Clear site cookies (+ optional page storage) and reload — Incognito-style meter reset.
- * @param {number} tabId
- * @param {string} pageUrl
- * @param {{ cookieMode?: string, clearStorage?: boolean, reload?: boolean }} [opts]
- */
-async function resetMeterForTab(tabId, pageUrl, opts = {}) {
-  const settings = await loadSettings();
-  if (settings.meterResetEnabled === false || settings.features?.meterReset === false) {
-    return { ok: false, error: 'meter-reset-disabled' };
-  }
-  const isAuto = opts.auto === true;
-  const cookieMode = isAuto
-    ? 'meter-names'
-    : opts.cookieMode || settings.meterResetCookieMode || 'meter-names';
-  const clearStorage =
-    opts.clearStorage !== undefined ? opts.clearStorage : settings.meterResetClearStorage !== false;
-  const clearDurable = isAuto
-    ? false
-    : Boolean(opts.clearDurable ?? settings.meterResetClearDurableStorage);
-  let reload = opts.reload !== false;
-  const forceReload = opts.forceReload === true;
+const { resetMeterForTab, resetMeterFromMessage } = createMeterResetter({
+  chromeApi: chrome,
+  loadSettings,
+  getExclusionHosts: getActiveExclusionHosts,
+});
 
-  // 1) Disarm gate chrome first — Spiked ships full body + CSS gate
-  let disarm = null;
-  if (tabId) {
-    try {
-      disarm = await sendToTopFrame(tabId, { type: 'GAF_DISARM_METER' });
-    } catch {
-      disarm = null;
-    }
-  }
-
-  // 2) Cookie wipe — only cookies that match this page URL
-  const cookieResult = await clearCookiesForPageUrl(pageUrl, {
-    mode: cookieMode === 'all' && !isAuto ? 'all' : 'meter-names',
-  });
-
-  // 3) Storage wipe (top frame only; durable stores only if explicitly selected)
-  let storageCleared = false;
-  if (clearStorage && tabId) {
-    try {
-      const response = await sendToTopFrame(tabId, {
-        type: 'GAF_CLEAR_PAGE_STORAGE',
-        durable: clearDurable,
-      });
-      storageCleared = Boolean(response?.ok);
-    } catch {
-      storageCleared = false;
-    }
-  }
-
-  // 4) Reload only if body still looks empty / caller forces it
-  const usefulDisarm = Boolean(disarm?.useful || (disarm?.articleChars || 0) >= 400);
-  if (usefulDisarm && !forceReload && opts.reload !== true) {
-    // Content already readable after disarm — skip reload so the user keeps scroll position
-    reload = false;
-  }
-  if (opts.reload === true) reload = true;
-
-  if (reload && tabId) {
-    try {
-      await chrome.tabs.reload(tabId);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return {
-    ok: cookieResult.ok !== false || usefulDisarm,
-    cookiesRemoved: cookieResult.removed || 0,
-    cookieNames: cookieResult.names || [],
-    domain: cookieResult.domain || '',
-    storageCleared,
-    reloaded: reload,
-    disarm,
-    error: cookieResult.error,
-  };
-}
+chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.storage.session.remove(`gafMeterAttempts:${tabId}`).catch(() => {});
+});
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   ensureContextMenus();
@@ -430,32 +360,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === 'GAF_RESET_METER') {
-    (async () => {
-      try {
-        let tabId = message.tabId || _sender?.tab?.id;
-        let pageUrl = message.url || _sender?.tab?.url || '';
-        if (!tabId || !pageUrl) {
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-          tabId = tab?.id;
-          pageUrl = pageUrl || tab?.url || '';
-        }
-        if (!tabId || !pageUrl) {
-          sendResponse({ ok: false, error: 'no-tab' });
-          return;
-        }
-        const result = await resetMeterForTab(tabId, pageUrl, {
-          cookieMode: message.cookieMode,
-          clearStorage: message.clearStorage,
-          clearDurable: message.clearDurable,
-          reload: message.reload !== false,
-          forceReload: message.forceReload === true,
-          auto: message.auto === true,
-        });
-        sendResponse(result);
-      } catch (e) {
-        sendResponse({ ok: false, error: String(e?.message || e) });
-      }
-    })();
+    resetMeterFromMessage(message, _sender)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
     return true;
   }
 

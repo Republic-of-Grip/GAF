@@ -19,10 +19,9 @@
   /** Shop / cookie locks only — not generic overflow-hidden (breaks YT fullscreen). */
   const CONSENT_BODY_LOCKS = ['noscroll', 'phantom-scroll-bar', 'modal-open', 'no-scroll'];
 
+  // Keep aligned with interaction-guard.mjs; never infer what "selected" means.
   const MINIMAL_RE =
-    /godta valgte|accept selected|necessary only|kun n[øo]dvendig|avvis alle|reject all|decline/i;
-  const FULL_RE =
-    /godta alle|accept all|allow all|aksepter alle|jeg godtar|i agree|allow cookies|accept cookies/i;
+    /^(?:necessary only|only necessary|kun n[øo]dvendige?|bare n[øo]dvendige?|avvis alle|reject all|decline all|deny all|refuse all)(?: cookies| informasjonskapsler)?[.!]?$/i;
   // No bare "privacy" — matches app settings text (Grok etc.) and false-unsticks modals
   const CONSENT_RE =
     /cookie|cookies|personvern|consent|samtykke|vi tilpasser|privacy policy|cookie policy|informasjonskapsler|we use cookies|vi bruker cookies/i;
@@ -350,53 +349,21 @@ html.gaf-force-unlock [data-gaf-blocker="1"] {
     return false;
   }
 
-  function isDiturHost() {
-    const h = hostNorm();
-    return h === 'ditur.no' || h.endsWith('.ditur.no');
-  }
-
-  function seedCookie() {
-    if (!isDiturHost()) return false;
-    try {
-      const payload = {
-        timestamp: new Date().toISOString(),
-        consent_domain: location.hostname,
-        cookie_consent_id: 'gaf' + Math.random().toString(36).slice(2, 10),
-        consents_approved: ['cookie_cat_necessary', 'cookie_cat_unclassified'],
-        consents_denied: [
-          'cookie_cat_functional',
-          'cookie_cat_statistic',
-          'cookie_cat_marketing',
-        ],
-      };
-      const v = encodeURIComponent(JSON.stringify(payload));
-      const maxAge = 14 * 24 * 60 * 60;
-      document.cookie = `cookie_consent=${v}; path=/; max-age=${maxAge}; samesite=lax`;
-      document.cookie = `cookie_consent=${v}; path=/; max-age=${maxAge}; samesite=lax; domain=${location.hostname}`;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   function clickConsentButtons() {
-    const text = (document.body?.innerText || '').slice(0, 4000);
-    const named = document.querySelector('#cookie-popup, #ditur-popup-content');
-    if (!named && !CONSENT_RE.test(text)) return null;
-
-    const buttons = document.querySelectorAll(
-      'button, [role="button"], a.button, input[type="button"], input[type="submit"]',
-    );
+    const roots = document.querySelectorAll('#cookie-popup, #ditur-popup-content, [role="dialog"], [aria-modal="true"]');
+    const buttons = [];
+    for (const root of roots) {
+      if (!CONSENT_RE.test(root.innerText || root.textContent || '')) continue;
+      buttons.push(...root.querySelectorAll('button, [role="button"], a.button, input[type="button"], input[type="submit"]'));
+    }
     let minimal = null;
-    let full = null;
     for (const btn of buttons) {
       if (btn.disabled) continue;
       const t = (btn.innerText || btn.textContent || btn.value || '').replace(/\s+/g, ' ').trim();
       if (!t || t.length > 80) continue;
       if (MINIMAL_RE.test(t) && !minimal) minimal = btn;
-      else if (FULL_RE.test(t) && !full) full = btn;
     }
-    const hit = minimal || full;
+    const hit = minimal;
     if (!hit) return null;
 
     const token = `g${Math.random().toString(36).slice(2, 10)}`;
@@ -566,28 +533,12 @@ html.gaf-force-unlock [data-gaf-blocker="1"] {
 
   function forceUnlock(reason) {
     if (shouldSkipSite()) return { reason: 'skipped-media', btn: null, hidden: 0 };
+    const btn = clickConsentButtons();
+    if (!btn) return { reason: 'consent-awaiting-user', btn: null, hidden: 0 };
     injectCss();
     document.documentElement.classList.add('gaf-force-unlock');
-    const btn = clickConsentButtons();
     const hidden = markAndHideBlockers();
     unlockBody();
-    if (isDiturHost() && (hasConsentSignal() || btn)) seedCookie();
-    try {
-      window.dispatchEvent(
-        new CustomEvent('CookieInformationConsentGiven', {
-          detail: {
-            consents_approved: ['cookie_cat_necessary', 'cookie_cat_unclassified'],
-            consents_denied: [
-              'cookie_cat_functional',
-              'cookie_cat_statistic',
-              'cookie_cat_marketing',
-            ],
-          },
-        }),
-      );
-    } catch {
-      /* ignore */
-    }
     setTimeout(() => {
       if (shouldSkipSite() || !looksLocked()) return;
       clickConsentButtons();

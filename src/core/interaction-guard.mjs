@@ -14,8 +14,8 @@
  *  1) Page-locking consent with cookie-panel evidence → click exactly one
  *     least-privilege control, via exactly one event path (MAIN world when the
  *     page helper is reachable, otherwise a single isolated `click()`).
- *  2) If still locked → hard uncover (hide greys, unlock body). Cookie seeding
- *     is a named ditur.no adapter, not a global fallback.
+ *  2) If no explicit reject/necessary-only choice exists, leave consent visible.
+ *     Never infer consent from selected categories or seed a consent cookie.
  *  3) Orphan dimmer with no usable non-consent dialog → hide + unlock.
  *  4) Login / cart / filter / age-gate panels → leave alone.
  *  5) BankID / Morrow payment-auth windows → leave alone (not a cookie grey).
@@ -74,12 +74,9 @@ export const CONSENT_ROOT_SELECTORS = [
   '#ditur-popup-content',
 ];
 
-/**
- * Prefer minimal / selected consent over accept-all (ditur defaults only
- * necessary categories when using "Godta valgte").
- */
+/** Only explicit rejection / necessary-only choices are safe to automate. */
 export const CONSENT_MINIMAL_BTN_RE =
-  /godta valgte|accept selected|save (my )?preferences|necessary only|kun n[øo]dvendig|bare n[øo]dvendig|avvis alle|reject all|decline all|deny all|refuse/i;
+  /^(?:necessary only|only necessary|kun n[øo]dvendige?|bare n[øo]dvendige?|avvis alle|reject all|decline all|deny all|refuse all)(?: cookies| informasjonskapsler)?[.!]?$/i;
 
 export const CONSENT_FULL_BTN_RE =
   /godta alle|accept all|allow all|aksepter alle|jeg godtar|i agree|allow cookies|accept cookies|godta$/i;
@@ -518,8 +515,8 @@ export function documentHasCookieEvidence(doc) {
 }
 
 /**
- * Prefer "Godta valgte" / necessary-only over "Godta alle".
- * @returns {{ el: Element, label: string, kind: 'minimal'|'full' } | null}
+ * Select only an explicit reject-all or necessary-only choice.
+ * @returns {{ el: Element, label: string, kind: 'minimal' } | null}
  */
 export function findConsentAcceptButton(root) {
   if (!root?.querySelectorAll) return null;
@@ -527,7 +524,6 @@ export function findConsentAcceptButton(root) {
     'button, [role="button"], a.button, input[type="button"], input[type="submit"]',
   );
   let minimal = null;
-  let full = null;
   for (const btn of buttons) {
     if (btn.disabled) continue;
     const label = (btn.innerText || btn.textContent || btn.value || btn.getAttribute?.('aria-label') || '')
@@ -536,11 +532,9 @@ export function findConsentAcceptButton(root) {
     if (!label || label.length > 80) continue;
     if (CONSENT_MINIMAL_BTN_RE.test(label) && !minimal) {
       minimal = { el: btn, label, kind: 'minimal' };
-    } else if (CONSENT_FULL_BTN_RE.test(label) && !full) {
-      full = { el: btn, label, kind: 'full' };
     }
   }
-  return minimal || full;
+  return minimal;
 }
 
 /** Search whole document for consent accept buttons (not only inside known roots). */
@@ -645,19 +639,6 @@ export function dismissBlockingConsentWall(doc, view = globalThis) {
     }
   }
 
-  // Fallback: document-wide accept button only with cookie-specific evidence.
-  // Scroll-lock / dimmer alone must not click "I agree" on age gates or TOS.
-  const any = findConsentAcceptButtonInDocument(doc);
-  if (any && (locked || hasDimmer) && documentHasCookieEvidence(doc)) {
-    const clicked = clickConsentControl(any, view);
-    if (clicked.ok) {
-      result.dismissed = true;
-      result.button = any.label;
-      result.kind = any.kind;
-      result.path = clicked.path;
-      result.unlocked = unlockBodyScroll(doc);
-    }
-  }
   return result;
 }
 
@@ -897,8 +878,9 @@ export function seedMinimalConsentCookie(doc, view = globalThis) {
       timestamp: new Date().toISOString(),
       consent_domain: win.location?.hostname || 'www.ditur.no',
       cookie_consent_id: 'gaf' + Math.random().toString(36).slice(2, 12),
-      consents_approved: ['cookie_cat_necessary', 'cookie_cat_unclassified'],
+      consents_approved: ['cookie_cat_necessary'],
       consents_denied: [
+        'cookie_cat_unclassified',
         'cookie_cat_functional',
         'cookie_cat_statistic',
         'cookie_cat_marketing',
@@ -917,43 +899,14 @@ export function seedMinimalConsentCookie(doc, view = globalThis) {
   }
 }
 
-/**
- * Hard uncover when Alpine accept fails or is slow — hide greys, unlock, seed cookie.
- */
+/** Explicit force still cannot make an ambiguous consent decision. */
 export function forceUncoverInteractionLock(doc, view = globalThis) {
-  const result = {
-    cleared: 0,
-    unlocked: false,
-    seeded: false,
-    reason: 'force-uncover',
-  };
-  // Try clicks once more first
   const consent = dismissBlockingConsentWall(doc, view);
-  if (consent.dismissed) {
-    result.consent = { button: consent.button, kind: consent.kind };
-  }
-  result.cleared = hideBlockingDimmers(doc, view, new Set(), { hideConsentChrome: true });
-  result.unlocked = unlockBodyScroll(doc);
-  result.seeded = seedMinimalConsentCookie(doc, view);
-  // Dispatch CookieInformation-style event so deferred scripts wake up cleanly
-  try {
-    const win = view.defaultView || view || globalThis;
-    win.dispatchEvent?.(
-      new CustomEvent('CookieInformationConsentGiven', {
-        detail: {
-          consents_approved: ['cookie_cat_necessary', 'cookie_cat_unclassified'],
-          consents_denied: [
-            'cookie_cat_functional',
-            'cookie_cat_statistic',
-            'cookie_cat_marketing',
-          ],
-        },
-      }),
-    );
-  } catch {
-    /* ignore */
-  }
-  return result;
+  return {
+    cleared: 0, unlocked: consent.unlocked, seeded: false,
+    reason: consent.dismissed ? 'consent-dismissed' : 'consent-awaiting-user',
+    consent,
+  };
 }
 
 /**
@@ -990,32 +943,14 @@ export function unstickOrphanedOverlays(doc, view = globalThis, options = {}) {
       result.unlocked = unlockBodyScroll(doc) || consent.unlocked;
       result.consent = { button: consent.button, kind: consent.kind };
       result.reason = 'consent-dismissed';
-      // If Alpine ignored the click and we're still locked, hard-uncover immediately
-      if (isInteractionLocked(doc, view) || force) {
-        const hard = forceUncoverInteractionLock(doc, view);
-        result.cleared += hard.cleared;
-        result.unlocked = result.unlocked || hard.unlocked;
-        result.seeded = hard.seeded;
-        result.reason = 'consent-force-uncover';
-      }
       return result;
     }
 
-    // Consent-like copy visible but button click failed → never leave user frozen.
-    // Do NOT use force alone here: after a few seconds main.js always passes force,
-    // and app modals (Grok settings, etc.) use full-viewport dimmers that would be nuked.
-    if (locked || dimmer) {
-      const consentish =
-        hasConsentLikeVisible(doc, view) || Boolean(findConsentAcceptButtonInDocument(doc));
-      if (consentish) {
-        const hard = forceUncoverInteractionLock(doc, view);
-        result.cleared = hard.cleared;
-        result.unlocked = hard.unlocked;
-        result.seeded = hard.seeded;
-        result.consent = hard.consent;
-        result.reason = 'consent-force-uncover';
-        return result;
-      }
+    // Keep unresolved consent visible. Neither force mode nor a failed click
+    // authorizes acceptance, cookie seeding, or hiding the user's choices.
+    if (hasConsentLikeVisible(doc, view)) {
+      result.reason = 'consent-awaiting-user';
+      return result;
     }
   }
 

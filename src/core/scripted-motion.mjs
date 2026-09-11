@@ -7,7 +7,29 @@
  * (observed on av-avis.no / Polaris). Only pause infinite / long decorative loops.
  */
 
-const MARK = 'gafPaused';
+const pausedByGaf = new WeakMap();
+function stateFor(root) {
+  const doc = root.ownerDocument || root;
+  if (!pausedByGaf.has(doc)) pausedByGaf.set(doc, { animations: new Set(), svgs: new Set(), players: new Set() });
+  return pausedByGaf.get(doc);
+}
+
+export function restoreScriptedMotion(root = globalThis.document) {
+  if (!root) return;
+  const doc = root.ownerDocument || root;
+  const state = pausedByGaf.get(doc);
+  if (!state) return;
+  for (const anim of state.animations) {
+    try { if (anim.playState === 'paused') anim.play(); } catch { /* disposed */ }
+  }
+  for (const svg of state.svgs) {
+    try { if (svg.animationsPaused()) svg.unpauseAnimations(); } catch { /* disposed */ }
+  }
+  for (const player of state.players) {
+    try { player.play(); } catch { /* disposed */ }
+  }
+  pausedByGaf.delete(doc);
+}
 
 const MEDIA_TAGS = new Set(['IMG', 'PICTURE', 'VIDEO', 'SOURCE', 'CANVAS', 'AUDIO']);
 
@@ -80,9 +102,7 @@ export function pauseWebAnimations(root = globalThis.document) {
         if (anim.playState !== 'running' && anim.playState !== 'pending') continue;
         if (shouldSkipAnimation(anim)) continue;
         anim.pause();
-        if (anim.effect?.target?.dataset) {
-          anim.effect.target.dataset[MARK] = '1';
-        }
+        stateFor(root).animations.add(anim);
         count += 1;
       } catch {
         // ignore individual animation failures
@@ -117,8 +137,10 @@ export function pauseSvgAnimations(root = globalThis.document) {
         ) {
           continue;
         }
-        if (typeof svg.pauseAnimations === 'function') {
+        if (typeof svg.pauseAnimations === 'function' && typeof svg.animationsPaused === 'function' &&
+            typeof svg.unpauseAnimations === 'function' && !svg.animationsPaused()) {
           svg.pauseAnimations();
+          stateFor(root).svgs.add(svg);
           count += 1;
         }
       } catch {
@@ -147,8 +169,10 @@ export function pauseKnownPlayers(root = globalThis.document) {
     for (const sel of selectors) {
       for (const el of root.querySelectorAll(sel)) {
         try {
-          if (typeof el.pause === 'function') {
+          if (typeof el.pause === 'function' && typeof el.play === 'function' &&
+              (el.isPaused === false || el.paused === false || el.currentState === 'playing')) {
             el.pause();
+            stateFor(root).players.add(el);
             count += 1;
           } else if (el.shadowRoot) {
             pauseWebAnimations(el.shadowRoot);

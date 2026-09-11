@@ -75,9 +75,9 @@ function updateStatus(s, host) {
   let extra = '';
   if (!s.enabled) {
     extra =
-      'Master switch OFF — toolbar icon is grey with a red slash. Flip the green slider on.';
+      'Filtering is off. Reload this page to fully restore timers and site components.';
   } else if (policy.reason === 'excluded') {
-    extra = 'Site is in the exclusion backlog (review later).';
+    extra = 'Site is excluded. Reload this page to fully restore timers and site components.';
   } else if (policy.reason === 'deny-list') extra = 'Force-filtered.';
   else extra = 'Filtering ON — toolbar icon is green.';
 

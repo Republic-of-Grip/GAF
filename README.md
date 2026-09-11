@@ -6,7 +6,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.26)
+## Features (v0.2.28)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -16,7 +16,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 | Scripted motion pause | On | Infinite WAAPI / SVG / Lottie loops only |
 | **Time freeze** | **Slow** (soft-wall hosts) | Stretches long page timers for soft paywalls |
 | Time freeze Stop | Optional | Heavy timer stretch + **reading snapshot** overlay |
-| **Meter reset** | **Auto** | Disarm free-article gates; auto wipe is meter-named cookies only, after two wall signals |
+| **Meter reset** | **Auto** | Disarm free-article gates; auto wipe is meter-named cookies only, with corroborating wall evidence |
 | Element hiding | On | Built-in soft-paywall / regwall selectors + your rules |
 | Custom CSS per host | On (empty map) | Options → Advanced |
 | Exclusion backlog | — | Exclude site → review / resolve later |
@@ -54,7 +54,7 @@ Some sites give N free reads/month, then ask you to register. If **Incognito sti
 
 Same spirit as “open in Incognito,” without a second window. You may need to log in again if you had a membership session on that host.
 
-**Automatic by default:** multi-pass **disarm** on soft-wall hosts, plus **cookie wipe + reload** once if the body is still empty after disarm (mode **auto**). Popup button remains for a forced wipe anytime.
+**Automatic by default:** multi-pass **disarm** on soft-wall hosts. If the body remains unreadable and wall evidence is sufficient (a specific gate selector, or a generic selector plus meter text), GAF may clear meter-named cookies and reload once per tab/article path per browser session. Automatic mode never clears page storage or durable data. The retry record lives in extension session storage and survives page reloads. Resets stop when GAF is off, the site is excluded, or the tab navigates away. Popup reset remains a manual action using the selected deletion options.
 
 Built-in soft-wall hosts include `spiked-online.com` and the usual newspaper list.
 
@@ -62,25 +62,29 @@ Built-in soft-wall hosts include `spiked-online.com` and the usual newspaper lis
 
 | Situation | GAF action |
 |-----------|------------|
-| **Page-locking cookie wall** (body `noscroll` / full grey scrim + accept buttons) | Clicks least-privilege accept — e.g. ditur.no **Godta valgte** (necessary only) before **Godta alle** — then unlocks scroll |
+| **Page-locking cookie wall** (body `noscroll` / full grey scrim + accept buttons) | Clicks only explicit **Reject all** / **Necessary only** choices in consent panels. **Accept selected** and **Accept all** remain for the user |
 | **Orphan grey dimmer** (Hyvä `.backdrop`, filter scrim, auth overlay mid-transition) | Hides dimmer + unlocks body (`noscroll`, `phantom-scroll-bar`, `overflow-hidden`) |
 | Login / cart / filter panel with real UI | Left alone |
 | **X.com / Twitter compose & reply** | Tool-SPA host — unstick + CSS motion skipped so the mask is not treated as a cookie grey (clicks no longer fall through to the timeline). GIF freeze still runs on the feed. |
 | **X.com photo / status lightbox** | Media inside dialogs is not source-stripped (avoids stacked/garbled conversation column). Toggling GAF **off** now restores unstick hides without a full page reload. |
 | **BankID / Morrow payment auth** | First-party 3DS / BankID windows and iframes are left alone so card verification can open. Ads and unrelated popups stay blocked. |
 
-Verified live on **ditur.no** Orient Bambino PLP (Helium GAF Debug): cookie stack uses `bg-gray-500/75` + “Vi tilpasser opplevelsen din”; accepting uncovers 30+ products underneath.
+Earlier versions were tested live against Ditur's “Godta valgte” flow. Version 0.2.28 deliberately leaves that ambiguous choice to you; selected categories are not assumed to be necessary-only. No consent cookie or consent event is fabricated by the automatic handlers.
 
 ## Exclusion backlog
 
 When GAF breaks a site:
 
 1. Popup → **Exclude site → review backlog**, or context menu **Exclude site**
-2. Filtering stops for that host
+2. Filtering stops for that host; reload the page for a full recovery
 3. Open **Options → Exclusion backlog**
 4. Add notes, mark *reviewing* / *resolved*, or remove to filter again
 
 Resolved entries stop excluding; they remain as history until removed.
+
+### Turning filtering off
+
+OFF/exclusion cancels queued meter actions and restores tracked meter styles, media, and scripted animations. Reload the page to fully restore existing stretched timers, replaced custom elements, and page-managed state. Completed cookie/storage deletion and consent choices cannot be undone by the switch. A deletion already in flight may complete; current policy is checked again before each subsequent action.
 
 ## Inspection archive
 
@@ -154,7 +158,11 @@ gaf/
 
 ## Privacy
 
-Everything is local (`chrome.storage.sync` for settings, `local` for backlog & archive). No analytics, no remote rules.
+Settings are stored locally and mirrored, best-effort, to `chrome.storage.sync`. On browsers with account sync enabled, that mirror may be uploaded and shared across your synced browsers. Local settings remain authoritative; sync is also used as a legacy fallback when local settings are missing.
+
+The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records stay in `chrome.storage.session`. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes. Review these before sharing them or attaching them to public issues.
+
+No analytics or remotely downloaded filter rules. The **Check for updates** button contacts GitHub for version metadata, and **Update** opens a GitHub ZIP download. Neither installs or executes downloaded code automatically.
 
 ## Roadmap
 
