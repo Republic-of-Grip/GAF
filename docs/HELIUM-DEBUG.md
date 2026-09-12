@@ -4,8 +4,10 @@ Two Helium profiles, deliberately separate:
 
 | Profile | Path | Purpose |
 |---------|------|---------|
-| **Daily** | `%LOCALAPPDATA%\imput\Helium\User Data` | Normal browsing, privacy, bookmarks |
-| **GAF Debug** | `%LOCALAPPDATA%\Helium-GAF-Debug\User Data` | Extension QA, full CDP, automation |
+| **Daily (Windows)** | `%LOCALAPPDATA%\imput\Helium\User Data` | Normal browsing, privacy, bookmarks |
+| **GAF Debug (Windows)** | `%LOCALAPPDATA%\Helium-GAF-Debug\User Data` | Extension QA, full CDP, automation |
+| **Daily (Linux)** | Typical config dir such as `~/.config/net.imput.Helium` — do not pass this to `--user-data-dir` | Normal browsing |
+| **GAF Debug (Linux)** | `${XDG_DATA_HOME:-~/.local/share}/Helium-GAF-Debug/User Data` | Extension QA, full CDP, automation |
 
 No need to fork [imputnet/helium](https://github.com/imputnet/helium) for this. A second `user-data-dir` + classic Chromium remote-debugging flags is enough.
 
@@ -17,11 +19,11 @@ This launcher uses:
 
 ```text
 --remote-debugging-port=9333
---user-data-dir=…\Helium-GAF-Debug\User Data
+--user-data-dir=…/Helium-GAF-Debug/User Data
 --load-extension=<your-gaf-folder>
 ```
 
-Port **9333** avoids clashing with daily Helium’s 9222 listener.
+Port **9333** avoids clashing with daily Helium’s 9222 listener. Neither launcher adds `--remote-allow-origins=*`.
 
 ## Launch
 
@@ -54,6 +56,29 @@ Useful flags:
 .\helium-gaf-debug.ps1 -NoExtension           # no auto --load-extension
 ```
 
+### Linux / Ubuntu
+
+Sketch of the same CDP flags as the PowerShell launcher. This path has not been live-verified against Ubuntu Helium.
+
+```bash
+cd <your-gaf-folder>/scripts
+./helium-gaf-debug.sh
+```
+
+The script looks for Helium (then Chromium) under `~/.local`, `/opt`, and `PATH`. Override with `HELIUM_EXE`. The debug `user-data-dir` is always `Helium-GAF-Debug` — never the daily Helium profile.
+
+Useful flags:
+
+```bash
+./helium-gaf-debug.sh --url "https://www.spiked-online.com/"
+./helium-gaf-debug.sh --kill-existing          # restart debug instance
+./helium-gaf-debug.sh --probe-only             # check CDP only; exits 1 if not responding
+./helium-gaf-debug.sh --port 9334              # alternate port
+./helium-gaf-debug.sh --no-extension           # no auto --load-extension
+```
+
+On a Chromium fallback, pass `--url chrome://extensions` if `helium://extensions` is not handled.
+
 ## Connect browser-use
 
 After CDP prints **READY**:
@@ -62,6 +87,15 @@ After CDP prints **READY**:
 $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
 $env:BU_CDP_URL = "http://127.0.0.1:9333"
 # or:  . "$env:LOCALAPPDATA\Helium-GAF-Debug\set-cdp-env.ps1"
+browser-use --doctor
+```
+
+Linux / Ubuntu (after CDP prints **READY**):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+export BU_CDP_URL="http://127.0.0.1:9333"
+# or:  . "${XDG_DATA_HOME:-$HOME/.local/share}/Helium-GAF-Debug/set-cdp-env.sh"
 browser-use --doctor
 ```
 
@@ -96,12 +130,12 @@ Daily Helium keeps its own extension list; reload GAF there separately when you 
 
 ## Safety notes
 
-- The launcher keeps the default DevTools WebSocket origin restriction. If an automation client reports an origin rejection, identify that client's exact Origin and allow only that value; do not use a wildcard. These scripts have not been live-tested on Windows/Helium for v0.2.28.
+- The launchers keep the default DevTools WebSocket origin restriction. If an automation client reports an origin rejection, identify that client's exact Origin and allow only that value; do not use a wildcard. Windows scripts have not been live-tested on Helium for v0.2.29. The Ubuntu `helium-gaf-debug.sh` is a path/flag sketch and has not been live-verified against Ubuntu Helium.
 
 - Debug profile has **full automation access** (CDP can read cookies, drive tabs). Only connect trusted tools (`BU_CDP_URL` localhost).
 - Do **not** set `user-data-dir` to your daily profile while CDP is on.
 - You can run **both** profiles at once (two windows, two data dirs).
-- Wiping debug state: quit debug Helium, delete `%LOCALAPPDATA%\Helium-GAF-Debug`.
+- Wiping debug state: quit debug Helium, then delete `%LOCALAPPDATA%\Helium-GAF-Debug` (Windows) or `${XDG_DATA_HOME:-~/.local/share}/Helium-GAF-Debug` (Linux).
 
 ## When a Helium fork would make sense
 
@@ -114,7 +148,9 @@ Only if you need browser-level patches (e.g. always-on CDP in the main UI, polic
 | Port in use | `-Port 9334` or `-KillExisting` |
 | CDP 404 on 9222 | That’s daily Helium’s inspect toggle — use this launcher (9333) |
 | GAF not loaded | Load unpacked; check path to `manifest.json` |
-| browser-use still fails | Confirm `BU_CDP_URL=http://127.0.0.1:9333` and `.\helium-gaf-debug.ps1 -ProbeOnly` |
+| browser-use still fails | Confirm `BU_CDP_URL=http://127.0.0.1:9333` and `.\helium-gaf-debug.ps1 -ProbeOnly` (Linux: `./helium-gaf-debug.sh --probe-only`) |
+| `--probe-only` exits 1 | CDP is not responding on that port (expected when debug Helium is not running) |
+| Helium not found (Linux) | Install Helium, place it under `~/.local` / `/opt` / `PATH`, or set `HELIUM_EXE` |
 
 ## Case study: ditur.no grey lock (2026-07)
 
