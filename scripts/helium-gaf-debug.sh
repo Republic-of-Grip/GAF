@@ -14,7 +14,7 @@
 #   --kill-existing     Stop processes using this debug user-data-dir, then relaunch
 #   --probe-only        Only check whether CDP responds (exit 1 if not)
 #
-# Override the browser binary with HELIUM_EXE. Do not pass --remote-allow-origins=*.
+# Override the browser binary with HELIUM_EXE. Do not allow a wildcard DevTools origin.
 
 set -euo pipefail
 

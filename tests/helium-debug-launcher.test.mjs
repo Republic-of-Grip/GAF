@@ -14,7 +14,7 @@ test('Linux debug launcher matches CDP safety and unpacked-load flags', () => {
   assert.match(src, /--load-extension=/);
   assert.match(src, /Helium-GAF-Debug/);
   assert.match(src, /PORT=9333/);
-  assert.doesNotMatch(src, /--remote-allow-origins=\*/);
+  assert.doesNotMatch(src, /remote-allow-origins/);
   assert.doesNotMatch(src, /user-data-dir=.*net\.imput\.Helium/);
 });
 
