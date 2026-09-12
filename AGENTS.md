@@ -15,6 +15,8 @@ GAF is a personal Manifest V3 extension with vanilla JavaScript and no runtime d
 
 ## Verification and delivery
 
+Start work from a GitHub issue. The pull request must name and close that issue.
+
 Run `node --test` and `git diff --check`. Add focused regression coverage for behavioral fixes. Distinguish mocked tests from real Helium and Windows checks; do not claim unperformed checks passed.
 
 Use a branch and pull request for review. Do not merge or release unless requested.

@@ -6,7 +6,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.28)
+## Features (v0.2.29)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -112,6 +112,7 @@ GAF is an **unpacked** install (`Load unpacked` or Helium `--load-extension`). C
 
 | Step | What happens |
 |------|----------------|
+| **v0.2.29** | GitHub zip lands in the existing unpacked folder. Click **Reload** on the GAF card in `helium://extensions` / `chrome://extensions`. Do not Load unpacked again. |
 | **Check for updates** | Reads GitHub releases/tags/`manifest.json`. |
 | **Update** | Downloads the GitHub source zip into the existing GAF folder (first time: pick that same folder so the files can be written). |
 | **Extensions → Reload** | The one remaining step. On the GAF card click **Reload** (developer mode). Helium/Chrome may also show an **Update** control on that page — use the GAF card **Reload** so unpacked files on disk are picked up. Do not Load unpacked again. |
@@ -130,7 +131,14 @@ cd <your-gaf-folder>/scripts
 ./create-desktop-shortcut.ps1
 ```
 
-See [docs/HELIUM-DEBUG.md](docs/HELIUM-DEBUG.md).
+Linux / Ubuntu:
+
+```bash
+cd <your-gaf-folder>/scripts
+./helium-gaf-debug.sh
+```
+
+See [docs/HELIUM-DEBUG.md](docs/HELIUM-DEBUG.md). The Linux launcher is a flag/path sketch; it has not been live-verified on Ubuntu Helium.
 
 ## Develop
 
