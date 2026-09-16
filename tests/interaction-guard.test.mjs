@@ -468,6 +468,126 @@ test('full-viewport background video is not an orphan dimmer', () => {
   assert.equal(isBlockingDimmer(video, view), false);
 });
 
+function fullViewportView() {
+  return {
+    innerWidth: 800,
+    innerHeight: 900,
+    getComputedStyle() {
+      return {
+        display: 'flex',
+        visibility: 'visible',
+        pointerEvents: 'auto',
+        opacity: '1',
+        position: 'fixed',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'none',
+        webkitBackdropFilter: 'none',
+      };
+    },
+  };
+}
+
+test('empty Ditur #confirmOverlay is still a blocking dimmer', () => {
+  const overlay = {
+    nodeType: 1,
+    tagName: 'DIV',
+    id: 'confirmOverlay',
+    className: 'backdrop',
+    dataset: {},
+    style: {},
+    getAttribute(name) {
+      if (name === 'data-gaf-unstuck') return null;
+      return null;
+    },
+    getBoundingClientRect() {
+      return { width: 800, height: 900 };
+    },
+    querySelector() {
+      return null;
+    },
+    innerText: '',
+    textContent: '',
+  };
+  assert.equal(isBlockingDimmer(overlay, fullViewportView()), true);
+});
+
+test('Tirsdagsquizen #confirmOverlay with Send inn is not a blocking dimmer', () => {
+  const submit = { tagName: 'BUTTON' };
+  const overlay = {
+    nodeType: 1,
+    tagName: 'DIV',
+    id: 'confirmOverlay',
+    className: 'confirm-overlay',
+    dataset: {},
+    style: {},
+    getAttribute(name) {
+      if (name === 'data-gaf-unstuck') return null;
+      return null;
+    },
+    getBoundingClientRect() {
+      return { width: 800, height: 900 };
+    },
+    querySelector(sel) {
+      if (String(sel).includes('button')) return submit;
+      return null;
+    },
+    innerText: 'Dine svar 1. A: Vikingtiden Send inn og se resultatet ditt!',
+    textContent: 'Dine svar 1. A: Vikingtiden Send inn og se resultatet ditt!',
+  };
+  assert.equal(isBlockingDimmer(overlay, fullViewportView()), false);
+});
+
+test('unstick leaves Tirsdagsquizen submit overlay visible', () => {
+  const submit = { tagName: 'BUTTON' };
+  const overlay = {
+    nodeType: 1,
+    tagName: 'DIV',
+    id: 'confirmOverlay',
+    className: 'confirm-overlay',
+    dataset: {},
+    style: {
+      display: 'flex',
+      setProperty(k, v) {
+        this[k] = v;
+      },
+    },
+    getAttribute(name) {
+      if (name === 'data-gaf-unstuck') return this.dataset?.gafUnstuck || null;
+      return null;
+    },
+    setAttribute(name, val) {
+      if (name === 'data-gaf-unstuck') this.dataset.gafUnstuck = val;
+    },
+    getBoundingClientRect() {
+      return { width: 800, height: 900 };
+    },
+    querySelector(sel) {
+      if (String(sel).includes('button')) return submit;
+      return null;
+    },
+    querySelectorAll() {
+      return [submit];
+    },
+    innerText: 'Dine svar 1. A: Vikingtiden Send inn og se resultatet ditt!',
+    textContent: 'Dine svar 1. A: Vikingtiden Send inn og se resultatet ditt!',
+  };
+  const doc = {
+    querySelectorAll(sel) {
+      if (sel === '#confirmOverlay') return [overlay];
+      return [];
+    },
+    body: {
+      classList: { contains() { return false; } },
+      style: {},
+      children: [overlay],
+    },
+    documentElement: { style: {}, classList: { contains() { return false; } } },
+  };
+  const result = unstickOrphanedOverlays(doc, fullViewportView());
+  assert.equal(overlay.style.display, 'flex');
+  assert.notEqual(result.reason, 'cleared');
+});
+
 test('full-viewport marketing hero hosting a video is not an orphan dimmer', () => {
   const videoEl = {
     getBoundingClientRect() {

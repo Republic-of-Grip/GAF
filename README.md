@@ -6,7 +6,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.28)
+## Features (v0.2.30)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -38,7 +38,7 @@ Also available:
 
 Built-in soft-wall host hints include Telegraph, NYT, FT, WSJ, and others. Timer slow applies on those hosts when scope is **softwall** (default), or on all sites when scope is **all** — unless the site is excluded.
 
-**Path-aware skip:** game / puzzle routes (`/games/`, `/puzzles/`, Wordle, Connections, crossword, etc., plus `games.*` hosts) never get timer stretch. Those apps use multi-second timeouts for UX (toasts, win modals); stretching them freezes the puzzle for minutes after a win.
+**Path-aware skip:** game / puzzle routes (`/games/`, `/puzzles/`, Wordle, Connections, crossword, etc., plus `games.*` hosts) never get timer stretch. Those apps use multi-second timeouts for UX (toasts, win modals); stretching them freezes the puzzle for minutes after a win. The Tirsdagsquizen iframe host is skipped the same way.
 
 ## Free-article meters (cookies)
 
@@ -68,6 +68,7 @@ Built-in soft-wall hosts include `spiked-online.com` and the usual newspaper lis
 | **X.com / Twitter compose & reply** | Tool-SPA host — unstick + CSS motion skipped so the mask is not treated as a cookie grey (clicks no longer fall through to the timeline). GIF freeze still runs on the feed. |
 | **X.com photo / status lightbox** | Media inside dialogs is not source-stripped (avoids stacked/garbled conversation column). Toggling GAF **off** now restores unstick hides without a full page reload. |
 | **BankID / Morrow payment auth** | First-party 3DS / BankID windows and iframes are left alone so card verification can open. Ads and unrelated popups stay blocked. |
+| **Tirsdagsquizen / Polaris quiz iframe** | Widget host (`quiz-43ns.onrender.com`) skips unstick, CSS motion, and timer stretch. Submit uses `#confirmOverlay` — the same id as Ditur’s empty shop scrim — so GAF no longer hides overlays that contain real confirm UI. The newspaper article (av-avis.no) stays filtered. |
 
 Earlier versions were tested live against Ditur's “Godta valgte” flow. Version 0.2.28 deliberately leaves that ambiguous choice to you; selected categories are not assumed to be necessary-only. No consent cookie or consent event is fabricated by the automatic handlers.
 

@@ -192,6 +192,9 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
   const PAYMENT_AUTH_HOST_RE =
     /(^|\.)(bankid\.no|morrowbank\.no|morrowbank\.com)$/i;
 
+  // Keep in sync with settings.mjs QUIZ_WIDGET_HOST_RE
+  const QUIZ_WIDGET_HOST_RE = /(^|\.)quiz-43ns\.onrender\.com$/i;
+
   function isMediaPlayerHost(hostname) {
     return MEDIA_PLAYER_HOST_RE.test(normalizeHost(hostname));
   }
@@ -202,6 +205,10 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
 
   function isPaymentAuthHost(hostname) {
     return PAYMENT_AUTH_HOST_RE.test(normalizeHost(hostname));
+  }
+
+  function isQuizWidgetHost(hostname) {
+    return QUIZ_WIDGET_HOST_RE.test(normalizeHost(hostname));
   }
 
   function ensureStyle(id, css) {
@@ -293,7 +300,11 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
     // FilterBlade etc.: CSS motion + unstick break modals (strictness snaps back)
     const motion = s.motionLevel || 'moderate';
     const skipMotion =
-      motion === 'off' || isMediaPlayerHost(host) || isToolSpaHost(host) || isPaymentAuthHost(host);
+      motion === 'off' ||
+      isMediaPlayerHost(host) ||
+      isToolSpaHost(host) ||
+      isPaymentAuthHost(host) ||
+      isQuizWidgetHost(host);
     ensureStyle(MOTION_ID, skipMotion ? '' : cssForLevel(motion));
 
     // Teaser loops (vg.no <preview-video>) — skip on dedicated player hosts
@@ -327,7 +338,7 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
       path = '/';
     }
     // Games/puzzles use multi-second UX timers — never stretch (see Wordle win toast).
-    const isGame = looksLikeGameOrPuzzlePath(path, host);
+    const isGame = looksLikeGameOrPuzzlePath(path, host) || isQuizWidgetHost(host);
     const tfEnabled =
       !isGame &&
       !isPaymentAuthHost(host) &&
