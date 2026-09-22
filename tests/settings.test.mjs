@@ -16,6 +16,8 @@ import {
   looksLikePaymentAuthPage,
   isToolSpaHost,
   isPaymentAuthHost,
+  isQuizWidgetHost,
+  looksLikeQuizWidgetPage,
   shouldPauseScriptedMotionOnPage,
   shouldApplyMotionOnPage,
   isFrontOrSectionRoot,
@@ -167,6 +169,38 @@ test('BankID / Morrow payment-auth hosts skip motion and timers, not GIF freeze'
   assert.equal(shouldApplyMotionOnPage('https://www.starlink.com/checkout', s), true);
   // Media freeze still on — this is not "turn GAF off"
   assert.equal(shouldFreezeImagesOnPage('https://auth.bankid.no/', s), true);
+});
+
+test('Tirsdagsquizen widget host skips unstick/motion/timers; newspaper article stays filtered', () => {
+  const s = normalizeSettings({
+    enabled: true,
+    pauseScriptedMotion: true,
+    motionLevel: 'moderate',
+    freezeImages: true,
+    videoPolicy: 'heuristic',
+    timeFreezeMode: 'slow',
+    timeFreezeScope: 'all',
+  });
+  const widget = 'https://quiz-43ns.onrender.com/widget.html?newspaper=askoyveringen';
+  assert.equal(isQuizWidgetHost('quiz-43ns.onrender.com'), true);
+  assert.equal(isQuizWidgetHost('www.quiz-43ns.onrender.com'), true);
+  assert.equal(isQuizWidgetHost('other-app.onrender.com'), false);
+  assert.equal(isQuizWidgetHost('av-avis.no'), false);
+  assert.equal(looksLikeQuizWidgetPage(widget), true);
+  assert.equal(looksLikeGameOrPuzzlePage(widget), true);
+  assert.equal(shouldPauseScriptedMotionOnPage(widget, s), false);
+  assert.equal(shouldApplyMotionOnPage(widget, s), false);
+  assert.equal(shouldTimeFreezeOnPage(widget, s), false);
+  // Media freeze still on — not a wholesale GAF-off for the iframe
+  assert.equal(shouldFreezeImagesOnPage(widget, s), true);
+
+  const article = 'https://www.av-avis.no/nyheter/n/XM1mox/snart-er-det-halloween';
+  assert.equal(looksLikeQuizWidgetPage(article), false);
+  assert.equal(shouldApplyMotionOnPage(article, s), true);
+  assert.equal(shouldPauseScriptedMotionOnPage(article, s), true);
+  // Default softwall scope still must not stretch timers on local papers
+  const soft = normalizeSettings({ timeFreezeMode: 'slow', timeFreezeScope: 'softwall' });
+  assert.equal(shouldTimeFreezeOnPage(article, soft), false);
 });
 
 test('defaults are ON including time freeze slow and element hiding', () => {

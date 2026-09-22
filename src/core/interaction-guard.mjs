@@ -360,8 +360,17 @@ export function isBlockingDimmer(el, view = globalThis) {
   const hasBlur =
     cssFilterIsActive(style.backdropFilter) || cssFilterIsActive(style.webkitBackdropFilter);
 
-  // Known shop/consent dimmer classes (ditur Hyvä)
-  if (el.id === 'confirmOverlay' || el.id === 'ditur-popup-overlay') return true;
+  // Ditur Hyvä: empty #confirmOverlay / #ditur-popup-overlay is the grey scrim.
+  // Tirsdagsquizen reuses #confirmOverlay for the submit dialog (buttons +
+  // "Dine svar") — hide only when it is still an empty catcher.
+  if (el.id === 'confirmOverlay' || el.id === 'ditur-popup-overlay') {
+    const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text.length >= 24) return false;
+    if (el.querySelector?.('button, a, input, select, textarea, [role="button"]')) {
+      return false;
+    }
+    return true;
+  }
   if (/bg-gray-500\/75|bg-opacity-50|bg-black\/[456]|bg-white\/50/i.test(cls)) return true;
   if (/\bbackdrop\b/i.test(cls) || el.getAttribute?.('role') === 'overlay') {
     // Only if it looks empty (true scrim), not a content modal host

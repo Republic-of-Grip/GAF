@@ -432,6 +432,8 @@ export function looksLikeGameOrPuzzlePage(pageUrl) {
   const host = normalizeHost(url.hostname);
   // Dedicated games hosts (games.nytimes.com, games.washingtonpost.com, …)
   if (/^games?\./.test(host) || host.startsWith('puzzles.')) return true;
+  // Tirsdagsquizen iframe origin — submit overlay uses long-ish UX, not meters
+  if (isQuizWidgetHost(host)) return true;
   const path = url.pathname || '/';
   return GAME_PUZZLE_PATH_RE.test(path);
 }
@@ -578,6 +580,31 @@ export function looksLikePaymentAuthPage(pageUrl) {
   }
 }
 
+/**
+ * Third-party newspaper quiz widgets (Tirsdagsquizen / Polaris local papers).
+ *
+ * The quiz lives in a cross-origin iframe (`quiz-43ns.onrender.com/widget.html`).
+ * Interaction-guard treated its submit UI (`#confirmOverlay`, full-viewport
+ * rgba scrim + "Send inn") as Ditur's empty shop dimmer, so Submit appeared
+ * to do nothing. Narrow host allow only — the newspaper article stays filtered.
+ * Keep in sync with early.js and unstick-early.js.
+ */
+export const QUIZ_WIDGET_HOST_RE = /(^|\.)quiz-43ns\.onrender\.com$/i;
+
+export function isQuizWidgetHost(hostname) {
+  const h = normalizeHost(hostname);
+  return Boolean(h && QUIZ_WIDGET_HOST_RE.test(h));
+}
+
+export function looksLikeQuizWidgetPage(pageUrl) {
+  if (!pageUrl || typeof pageUrl !== 'string') return false;
+  try {
+    return isQuizWidgetHost(new URL(pageUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function shouldPauseScriptedMotionOnPage(pageUrl, settings, exclusionHosts = []) {
   const s = normalizeSettings(settings);
   if (!s.pauseScriptedMotion) return false;
@@ -587,6 +614,8 @@ export function shouldPauseScriptedMotionOnPage(pageUrl, settings, exclusionHost
   if (looksLikeToolSpaPage(pageUrl)) return false;
   // BankID / Morrow 3DS client: animation + timers are the auth UI, not decoration
   if (looksLikePaymentAuthPage(pageUrl)) return false;
+  // Tirsdagsquizen iframe: submit overlay + slide transitions are the product
+  if (looksLikeQuizWidgetPage(pageUrl)) return false;
   return resolveSitePolicy(pageUrl, s, exclusionHosts).active;
 }
 
@@ -598,6 +627,7 @@ export function shouldApplyMotionOnPage(pageUrl, settings, exclusionHosts = []) 
   // Keep FilterBlade CSS transitions for modal open/close
   if (looksLikeToolSpaPage(pageUrl)) return false;
   if (looksLikePaymentAuthPage(pageUrl)) return false;
+  if (looksLikeQuizWidgetPage(pageUrl)) return false;
   return resolveSitePolicy(pageUrl, s, exclusionHosts).active;
 }
 
@@ -616,6 +646,7 @@ export function shouldTimeFreezeOnPage(pageUrl, settings, exclusionHosts = []) {
   if (looksLikeToolSpaPage(pageUrl)) return false;
   // BankID / Morrow: stretching auth-step timers stalls the challenge window
   if (looksLikePaymentAuthPage(pageUrl)) return false;
+  // Tirsdagsquizen iframe: also covered by looksLikeGameOrPuzzlePage via host
 
   // Default: only soft-paywall hosts — avoids breaking lazy-load on local papers (e.g. av-avis.no)
   if (s.timeFreezeScope === 'softwall') {

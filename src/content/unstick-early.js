@@ -50,6 +50,13 @@
   const PAYMENT_AUTH_HOST_RE =
     /(^|\.)(bankid\.no|morrowbank\.no|morrowbank\.com)$/i;
 
+  /**
+   * Tirsdagsquizen widget iframe — never unstick. Keep in sync with settings.mjs
+   * QUIZ_WIDGET_HOST_RE. Regression: Submit opened #confirmOverlay (same id as
+   * Ditur's empty shop scrim) and GAF hid it, so Send inn did nothing.
+   */
+  const QUIZ_WIDGET_HOST_RE = /(^|\.)quiz-43ns\.onrender\.com$/i;
+
   const PAYMENT_AUTH_TEXT_RE =
     /bankid|morrow\s*bank|f[øo]dselsnummer|nasjonalt\s+identitetsnummer/i;
 
@@ -76,6 +83,10 @@
 
   function isPaymentAuthSite() {
     return PAYMENT_AUTH_HOST_RE.test(hostNorm());
+  }
+
+  function isQuizWidgetSite() {
+    return QUIZ_WIDGET_HOST_RE.test(hostNorm());
   }
 
   function paymentAuthSrc(src) {
@@ -131,6 +142,7 @@
     if (isMediaPlayerSite()) return true;
     if (isToolSpaSite()) return true;
     if (isPaymentAuthSite()) return true;
+    if (isQuizWidgetSite()) return true;
     if (isFullscreenMedia()) return true;
     return false;
   }
@@ -485,6 +497,11 @@ html.gaf-force-unlock [data-gaf-blocker="1"] {
         }
       }
 
+      if ((id === 'confirmOverlay' || id === 'ditur-popup-overlay') &&
+          (text.length >= 24 ||
+            el.querySelector?.('button, a, input, select, textarea, [role="button"]'))) {
+        continue;
+      }
       const isGrey =
         (alpha > 0.05 && alpha < 0.95) ||
         /bg-gray-500|bg-opacity-50/i.test(cls) ||

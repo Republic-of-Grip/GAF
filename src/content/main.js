@@ -342,6 +342,10 @@ async function runUnstick(opts = {}) {
   if (core.looksLikePaymentAuthPage(url)) {
     return { cleared: 0, unlocked: false, reason: 'skipped-payment-auth' };
   }
+  // Tirsdagsquizen iframe: #confirmOverlay is the submit dialog, not a Ditur grey
+  if (core.looksLikeQuizWidgetPage(url)) {
+    return { cleared: 0, unlocked: false, reason: 'skipped-quiz-widget' };
+  }
   if (core.looksLikeToolSpaPage(url) || core.looksLikePlayerPage(url)) {
     return { cleared: 0, unlocked: false, reason: 'skipped-tool-spa' };
   }
