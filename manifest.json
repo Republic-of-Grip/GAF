@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GAF — General Annoyance Filter",
   "short_name": "GAF",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "description": "Personal web filter: freeze media & motion, soft-paywall time freeze, meter cookie reset, element hide, interaction guard (cookie/grey unlock), and inspection archive. You take control.",
   "permissions": [
     "storage",
