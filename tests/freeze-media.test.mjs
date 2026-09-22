@@ -13,6 +13,8 @@ import {
   restoreFrozenMedia,
   allowVideoPlay,
   reconcileFrozenImages,
+  resolveFrozenVideoGesture,
+  isPlaybackToggleControl,
 } from '../src/core/freeze-media.mjs';
 
 class FakeClassList {
@@ -95,6 +97,105 @@ class FakeElement {
   closest() {
     return null;
   }
+  getAttributeNames() {
+    return [...this.attributes.keys()];
+  }
+  querySelector(selector) {
+    if (String(selector).trim().toLowerCase() !== 'video') return null;
+    return this.querySelectorAll('video')[0] || null;
+  }
+}
+
+function matchesSimple(el, selector) {
+  return selector.split(',').some((raw) => {
+    const sel = raw.trim();
+    if (!sel) return false;
+    if (sel.startsWith('.')) {
+      const cls = sel.slice(1);
+      return String(el.className || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .includes(cls);
+    }
+    const attrIncludes = sel.match(/^\[([a-zA-Z0-9-]+)\*=["']([^"']+)["']\]$/);
+    if (attrIncludes) {
+      const val = el.getAttribute?.(attrIncludes[1]);
+      return val != null && String(val).includes(attrIncludes[2]);
+    }
+    const attrToken = sel.match(/^\[([a-zA-Z0-9-]+)~=["']([^"']+)["']\]$/);
+    if (attrToken) {
+      const val = el.getAttribute?.(attrToken[1]) || '';
+      return val.split(/\s+/).includes(attrToken[2]);
+    }
+    const attrEq = sel.match(/^\[([a-zA-Z0-9-]+)=["']([^"']+)["']\]$/);
+    if (attrEq) return el.getAttribute?.(attrEq[1]) === attrEq[2];
+    if (/^[a-z0-9-]+$/i.test(sel)) return String(el.tagName || '').toUpperCase() === sel.toUpperCase();
+    return false;
+  });
+}
+
+function wireClosest(elements) {
+  for (const el of elements) {
+    el.closest = (selector) => {
+      let node = el;
+      while (node) {
+        if (matchesSimple(node, selector)) return node;
+        node = node.parentNode;
+      }
+      return null;
+    };
+  }
+}
+
+function mixkitPlayer({ pausedValue = 'false' } = {}) {
+  const shell = new FakeElement('div');
+  shell.className = 'video-player';
+  shell.setAttribute('data-controller', 'video-player--video-player');
+  shell.setAttribute('data-video-player--video-player-is-paused-value', pausedValue);
+
+  const video = new FakeElement('video');
+  video.className = 'video-player__viewer';
+  video.autoplay = true;
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.paused = true;
+  video.src = 'https://assets.mixkit.co/videos/40753/40753-720.mp4';
+  video.setAttribute('src', video.src);
+  video.setAttribute('autoplay', '');
+  video.setAttribute('loop', '');
+  video.setAttribute('muted', '');
+  video.setAttribute('playsinline', '');
+  video.pause = () => {
+    video.paused = true;
+  };
+  video.play = () => {
+    video.playCalls = (video.playCalls || 0) + 1;
+    video.paused = false;
+    return Promise.resolve();
+  };
+
+  const controls = new FakeElement('div');
+  controls.className = 'video-player__controls';
+  const button = new FakeElement('button');
+  button.className = 'video-player__play-pause';
+  button.setAttribute('title', 'Toggle Play');
+  button.setAttribute('data-action', 'click->video-player--video-player#togglePlay');
+  const svg = new FakeElement('svg');
+  svg.className = 'video-player__play-button';
+  button.appendChild(svg);
+  controls.appendChild(button);
+
+  const fullscreen = new FakeElement('button');
+  fullscreen.className = 'video-player__fullscreen';
+  fullscreen.setAttribute('title', 'View Fullscreen');
+  fullscreen.setAttribute('data-action', 'click->video-player--video-player#fullScreen');
+  controls.appendChild(fullscreen);
+
+  shell.appendChild(video);
+  shell.appendChild(controls);
+  wireClosest([shell, video, controls, button, svg, fullscreen]);
+  return { shell, video, button, svg, fullscreen };
 }
 
 function fakeDocument() {
@@ -387,4 +488,97 @@ test('VG preview-video re-freeze when src and play classes return', () => {
   assert.equal(freezePreviewVideoElement(preview), true);
   assert.equal(preview.getAttribute('src'), null);
   assert.equal(/preview-video-loaded/.test(preview.className), false);
+});
+
+test('Mixkit viewer is frozen as muted autoplay until the user starts it', () => {
+  const { video } = mixkitPlayer();
+  assert.equal(looksLikeAutoplayThumbnailStrict(video), true);
+  assert.equal(freezeVideoElement(video, { strictHeuristic: true }), true);
+  assert.equal(video.dataset.gafFrozen, 'video');
+  assert.equal(video.getAttribute('src'), null);
+  assert.equal(video.autoplay, false);
+  assert.equal(video.hasAttribute('loop'), false);
+});
+
+test('Mixkit play button and video click start a frozen player; fullscreen does not', () => {
+  const { video, svg, fullscreen } = mixkitPlayer();
+  freezeVideoElement(video, { strictHeuristic: true });
+
+  assert.equal(isPlaybackToggleControl(svg), true);
+  assert.equal(isPlaybackToggleControl(fullscreen), false);
+
+  const fromButton = resolveFrozenVideoGesture(svg);
+  assert.equal(fromButton.video, video);
+  assert.equal(fromButton.startPlay, true);
+
+  const fromVideo = resolveFrozenVideoGesture(video);
+  assert.equal(fromVideo.video, video);
+  assert.equal(fromVideo.startPlay, true);
+
+  assert.equal(resolveFrozenVideoGesture(fullscreen), null);
+
+  allowVideoPlay(video);
+  assert.equal(video.dataset.gafUserPlay, '1');
+  assert.equal(video.dataset.gafFrozen, undefined);
+  assert.equal(video.getAttribute('src'), 'https://assets.mixkit.co/videos/40753/40753-720.mp4');
+  video.playCalls = 0;
+  video.pause = () => {
+    video.pauseCalls = (video.pauseCalls || 0) + 1;
+    video.paused = true;
+  };
+  assert.equal(freezeVideoElement(video, { strictHeuristic: true }), false);
+  assert.equal(video.pauseCalls || 0, 0);
+  assert.equal(video.getAttribute('src'), 'https://assets.mixkit.co/videos/40753/40753-720.mp4');
+});
+
+test('Mixkit toggle that already shows paused lets the page call play()', () => {
+  const { video, svg } = mixkitPlayer({ pausedValue: 'true' });
+  freezeVideoElement(video, { strictHeuristic: true });
+  const gesture = resolveFrozenVideoGesture(svg);
+  assert.equal(gesture.video, video);
+  assert.equal(gesture.startPlay, false);
+});
+
+test('hover-preview grid play control does not thaw the card video', () => {
+  const card = new FakeElement('div');
+  card.className = 'item-grid-video-player';
+  const video = new FakeElement('video');
+  video.dataset.gafFrozen = 'video';
+  video.paused = true;
+  video.autoplay = true;
+  video.loop = true;
+  video.muted = true;
+  const button = new FakeElement('button');
+  button.setAttribute('title', 'Play');
+  button.className = 'item-grid-video-player__overlay-fullscreen';
+  card.appendChild(video);
+  card.appendChild(button);
+  wireClosest([card, video, button]);
+
+  assert.equal(resolveFrozenVideoGesture(button), null);
+  assert.equal(video.dataset.gafFrozen, 'video');
+});
+
+test('feed thumbnail without a play control stays frozen', () => {
+  const video = new FakeElement('video');
+  video.autoplay = true;
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.src = 'https://cdn.test/feed-thumb.mp4';
+  video.setAttribute('src', video.src);
+  video.setAttribute('autoplay', '');
+  video.setAttribute('loop', '');
+  video.setAttribute('muted', '');
+  video.setAttribute('playsinline', '');
+  video.pause = () => {};
+  video.getBoundingClientRect = () => ({ width: 320, height: 180, top: 400, left: 40 });
+  const view = { innerWidth: 1200, innerHeight: 800 };
+  assert.equal(freezeVideoElement(video, { strictHeuristic: true, view }), true);
+  assert.equal(video.getAttribute('src'), null);
+
+  const caption = new FakeElement('span');
+  caption.closest = () => null;
+  assert.equal(resolveFrozenVideoGesture(caption), null);
+  assert.equal(video.dataset.gafFrozen, 'video');
 });

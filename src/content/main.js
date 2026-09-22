@@ -11,6 +11,7 @@ let snapshotTimer = null;
 let unstickTimer = null;
 let unstickWatch = null;
 let corePromise = null;
+let coreModule = null;
 let lastUrl = '';
 let lastContextElement = null;
 let unstickPasses = 0;
@@ -41,7 +42,10 @@ function loadCore() {
       import(chrome.runtime.getURL('src/core/exclusions.mjs')),
       import(chrome.runtime.getURL('src/core/interaction-guard.mjs')),
       import(chrome.runtime.getURL('src/core/meter-reset.mjs')),
-    ]).then((mods) => Object.assign({}, ...mods));
+    ]).then((mods) => {
+      coreModule = Object.assign({}, ...mods);
+      return coreModule;
+    });
   }
   return corePromise;
 }
@@ -396,9 +400,9 @@ function mediaEventHandler(event) {
   const target = event.target;
   if (!target) return;
   if (target.tagName === 'VIDEO') {
-    if (event.type === 'play' && event.isTrusted && target.dataset?.gafUserPlay === '1') {
-      return;
-    }
+    // User already chose this video (play control / click). play, playing, and
+    // timeupdate must not pause it again.
+    if (target.dataset?.gafUserPlay === '1') return;
     onVideoEvent(target).catch(() => {});
     // Nested video inside <preview-video> shadow / light DOM
     const host = target.closest?.('preview-video, [class*="preview-video"]');
@@ -410,12 +414,41 @@ function mediaEventHandler(event) {
   }
 }
 
-/** Stable refs so enable/disable cycles do not accumulate handlers. */
-async function frozenVideoClickHandler(event) {
-  const video = event.target?.closest?.('video');
-  if (!video || video.dataset?.gafFrozen !== 'video') return;
-  const core = await loadCore();
+/**
+ * Capture-phase so sources are restored before the page's click handler
+ * calls play() / pause(). Mixkit's toggle is a sibling button, and its
+ * controller assumes autoplay already started — see resolveFrozenVideoGesture.
+ * Stable refs so enable/disable cycles do not accumulate handlers.
+ */
+function frozenVideoClickHandler(event) {
+  if (event.button != null && event.button !== 0) return;
+  const target = event.target;
+  if (!target) return;
+  const core = coreModule;
+  if (!core?.resolveFrozenVideoGesture) {
+    const video = target.closest?.('video');
+    if (!video || video.dataset?.gafFrozen !== 'video') return;
+    video.dataset.gafUserPlay = '1';
+    loadCore()
+      .then((loaded) => loaded.allowVideoPlay(video))
+      .catch(() => {});
+    return;
+  }
+  const gesture = core.resolveFrozenVideoGesture(target);
+  if (!gesture) return;
+  const { video, startPlay } = gesture;
+  // Set before restore/play so a synchronous play event cannot re-freeze.
+  video.dataset.gafUserPlay = '1';
   core.allowVideoPlay(video);
+  if (!startPlay) return;
+  event.preventDefault();
+  event.stopPropagation();
+  try {
+    const pending = video.play?.();
+    pending?.catch?.(() => {});
+  } catch {
+    /* ignore */
+  }
 }
 
 function contextMenuTrackHandler(event) {

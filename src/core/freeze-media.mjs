@@ -851,6 +851,138 @@ export function restoreFrozenMedia(elementsOrRoot = globalThis.document, options
 }
 
 /**
+ * Custom player shell (Mixkit `.video-player`), not a hover-preview card.
+ * Class selectors are tokens, so `item-grid-video-player` does not match.
+ */
+const PLAYER_SHELL_SELECTOR =
+  '.video-player, [data-controller~="video-player--video-player"]';
+
+function playerShellFor(element) {
+  if (!element || typeof element.closest !== 'function') return null;
+  try {
+    return element.closest(PLAYER_SHELL_SELECTOR);
+  } catch {
+    return null;
+  }
+}
+
+function isNavigationClick(target) {
+  if (!target || typeof target.closest !== 'function') return false;
+  let link = null;
+  try {
+    link = target.closest('a[href]');
+  } catch {
+    return false;
+  }
+  if (!link) return false;
+  const href = link.getAttribute?.('href') || '';
+  if (!href || href.startsWith('#') || href.startsWith('javascript:')) return false;
+  return true;
+}
+
+/**
+ * Explicit play/pause control. Fullscreen, scrub, and volume controls are not.
+ * Mixkit: button.video-player__play-pause[title="Toggle Play"] (sibling of the video).
+ */
+export function isPlaybackToggleControl(element) {
+  if (!element || typeof element.closest !== 'function') return false;
+  let control = null;
+  try {
+    control = element.closest(
+      'button, [role="button"], [data-action*="togglePlay"], [data-action*="toggle-play"]'
+    );
+  } catch {
+    return false;
+  }
+  if (!control) return false;
+  const hint = [
+    control.getAttribute?.('title'),
+    control.getAttribute?.('aria-label'),
+    control.getAttribute?.('data-action'),
+    typeof control.className === 'string' ? control.className : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (/fullscreen|volume|\bmute\b|scrub|\bseek\b/i.test(hint) && !/toggleplay|play-pause|\b(play|pause)\b/i.test(hint)) {
+    return false;
+  }
+  return /toggleplay|toggle-play|play-pause|play\/pause|\b(play|pause)\b/i.test(hint);
+}
+
+/**
+ * Frozen video a click is trying to control.
+ * Direct hits on the <video> count. So does a play/pause control in the same
+ * player shell — closest('video') misses that button because it is a sibling.
+ */
+export function frozenVideoForUserGesture(target) {
+  if (!target || typeof target.closest !== 'function') return null;
+  let direct = null;
+  try {
+    direct = target.closest('video');
+  } catch {
+    direct = null;
+  }
+  if (direct?.dataset?.gafFrozen === 'video') return direct;
+  if (isNavigationClick(target)) return null;
+  if (!isPlaybackToggleControl(target)) return null;
+  const shell = playerShellFor(target);
+  const video = shell?.querySelector?.('video');
+  if (video?.dataset?.gafFrozen === 'video') return video;
+  return null;
+}
+
+/**
+ * Stimulus-style players (Mixkit) set is-paused-value=false in connect()
+ * because they assume muted autoplay already started. GAF has paused the
+ * element, so the first toggle would call pause() again.
+ */
+export function playerAssumesAutoplayRunning(video) {
+  const shell = playerShellFor(video);
+  if (!shell || typeof shell.getAttributeNames !== 'function') return false;
+  try {
+    for (const name of shell.getAttributeNames()) {
+      if (!/is-paused-value$/i.test(name)) continue;
+      if (shell.getAttribute(name) === 'false') return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * True when the page's play/pause toggle would pause an already-paused frozen
+ * video. Caller should start playback and skip that page handler so the
+ * controller's "playing" flag stays in sync with the icon.
+ */
+export function shouldStartPlayOnFrozenToggle(target, video) {
+  if (!video || video.dataset?.gafFrozen !== 'video') return false;
+  if (video.paused === false) return false;
+  if (isNavigationClick(target)) return false;
+  if (!playerAssumesAutoplayRunning(video)) return false;
+  let onVideo = false;
+  try {
+    onVideo = target?.closest?.('video') === video;
+  } catch {
+    onVideo = false;
+  }
+  if (onVideo) return true;
+  return isPlaybackToggleControl(target);
+}
+
+/**
+ * @returns {{ video: Element, startPlay: boolean } | null}
+ */
+export function resolveFrozenVideoGesture(target) {
+  const video = frozenVideoForUserGesture(target);
+  if (!video) return null;
+  return {
+    video,
+    startPlay: shouldStartPlayOnFrozenToggle(target, video),
+  };
+}
+
+/**
  * Mark a video as user-intent so GAF stops re-freezing it this session.
  */
 export function allowVideoPlay(video) {

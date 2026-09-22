@@ -11,7 +11,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 | Feature | Default | What it does |
 |--------|---------|----------------|
 | Freeze GIFs | On | Canvas still frames (skips lazy-load spacers) |
-| Video autoplay policy | **Heuristic** | Broader muted/loop/autoplay freeze; full-bleed heroes stay visible (paused, sources kept) |
+| Video autoplay policy | **Heuristic** | Broader muted/loop/autoplay freeze; full-bleed heroes stay visible (paused, sources kept). A player’s play control can start that clip (Mixkit and similar) |
 | CSS motion | Moderate | Early inject at `document_start` |
 | Scripted motion pause | On | Infinite WAAPI / SVG / Lottie loops only |
 | **Time freeze** | **Slow** (soft-wall hosts) | Stretches long page timers for soft paywalls |
@@ -22,6 +22,8 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 | Exclusion backlog | — | Exclude site → review / resolve later |
 | Inspection archive | — | Right-click: save object + escape hints → promote to hide rule |
 | Import / export | — | Filter pack JSON |
+
+Muted autoplay still starts paused, including a stock-video page such as Mixkit. The play control on that player (a button beside the video, or a click on the video) starts the clip and GAF leaves it playing. Hover-preview grids stay frozen. Full-bleed heroes stay visible and paused, with their sources kept.
 
 ## Soft paywalls (“slow / stop time”)
 
