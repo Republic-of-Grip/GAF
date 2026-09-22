@@ -6,7 +6,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.28)
+## Features (v0.2.30)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -106,7 +106,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 

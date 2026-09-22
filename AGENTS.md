@@ -17,4 +17,6 @@ GAF is a personal Manifest V3 extension with vanilla JavaScript and no runtime d
 
 Run `node --test` and `git diff --check`. Add focused regression coverage for behavioral fixes. Distinguish mocked tests from real Helium and Windows checks; do not claim unperformed checks passed.
 
+**Every shippable behavior PR must bump the extension version** in both `manifest.json` and `package.json` (keep them in sync). Helium **Check for updates** compares remote vs installed versions; a same-version content drop on `main` looks like “You're on the latest” and hides **Update**. Version lives in the manifest (no GitHub releases/tags required).
+
 Use a branch and pull request for review. Do not merge or release unless requested.
