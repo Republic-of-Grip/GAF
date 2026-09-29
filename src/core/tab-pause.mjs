@@ -111,3 +111,38 @@ export function createTabPause({ chromeApi, now = () => Date.now() }) {
 
   return { isPaused, pausedTabIds, setPaused, paintTabBadge, repaintPausedBadges, forgetTab };
 }
+
+/**
+ * Service-worker message handling for the pause, kept here (a plain .mjs) so
+ * it can be unit tested on every supported Node version.
+ *
+ * - GAF_TAB_PAUSE_STATE: any frame asks about its own tab (sender.tab.id);
+ *   only extension pages (no sender.tab) may name another tab.
+ * - GAF_SET_TAB_PAUSE: extension pages (the popup) only, never a page.
+ *
+ * @returns {Promise<object> | null} null when the message is not ours.
+ */
+export function handleTabPauseMessage(message, sender, { tabPause, notifyTab }) {
+  if (message?.type === 'GAF_TAB_PAUSE_STATE') {
+    const tabId = sender?.tab ? sender.tab.id : message.tabId;
+    return tabPause
+      .isPaused(tabId)
+      .then((paused) => ({ ok: true, paused }))
+      .catch(() => ({ ok: true, paused: false }));
+  }
+  if (message?.type === 'GAF_SET_TAB_PAUSE') {
+    if (sender?.tab) return Promise.resolve({ ok: false, error: 'not-allowed-from-page' });
+    const tabId = message.tabId;
+    return tabPause
+      .setPaused(tabId, Boolean(message.paused), { url: message.url })
+      .then(async (result) => {
+        if (result.ok) {
+          await tabPause.paintTabBadge(tabId, result.paused);
+          await notifyTab?.(tabId);
+        }
+        return result;
+      })
+      .catch((e) => ({ ok: false, error: String(e?.message || e) }));
+  }
+  return null;
+}

@@ -6,6 +6,7 @@ import {
   effectiveSettingsForTab,
   tabPauseKey,
   TAB_PAUSE_BADGE,
+  handleTabPauseMessage,
 } from '../src/core/tab-pause.mjs';
 import {
   normalizeSettings,
@@ -124,58 +125,41 @@ test('every content script honours the tab pause', () => {
   }
 });
 
-test('service worker: popup pauses a tab, frames read it, pages cannot set it', async () => {
-  const session = {};
-  const listeners = {};
-  const sent = [];
-  const on = (name) => ({ addListener: (fn) => { (listeners[name] ||= []).push(fn); } });
-  globalThis.chrome = {
-    storage: {
-      session: {
-        get: async (k) => (k === null ? { ...session } : typeof k === 'string' ? (k in session ? { [k]: session[k] } : {}) : { ...k }),
-        set: async (o) => Object.assign(session, o),
-        remove: async (k) => { delete session[k]; },
-      },
-      local: { get: async (d) => ({ ...d }), set: async () => {} },
-      sync: { get: async (d) => ({ ...d }), set: async () => {} },
-      onChanged: on('storageChanged'),
-    },
-    runtime: { onMessage: on('message'), onInstalled: on('installed'), onStartup: on('startup'), getURL: (p) => p },
-    tabs: {
-      query: async () => [],
-      sendMessage: async (tabId, message) => { sent.push([tabId, message.type]); },
-      onRemoved: on('tabRemoved'),
-      onActivated: on('tabActivated'),
-      onUpdated: on('tabUpdated'),
-    },
-    action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {}, setIcon: async () => {}, setTitle: async () => {} },
-    contextMenus: { removeAll: (cb) => cb?.(), create: () => {}, onClicked: on('menu') },
-    cookies: {},
-  };
-  await import(`../src/background/service-worker.js?t=${Date.now()}`);
-  const handler = listeners.message[0];
-  const ask = (message, sender = {}) =>
-    new Promise((resolve) => {
-      const async = handler(message, sender, resolve);
-      if (!async) setTimeout(() => resolve(undefined), 0);
-    });
+test('pause messages: popup pauses a tab, frames read it, pages cannot set it', async () => {
+  const chromeApi = fakeChrome();
+  const tabPause = createTabPause({ chromeApi });
+  const notified = [];
+  const deps = { tabPause, notifyTab: async (id) => notified.push(id) };
+  const send = (message, sender = {}) => handleTabPauseMessage(message, sender, deps);
+
+  assert.equal(send({ type: 'GAF_SYNC_BADGE' }), null, 'other messages are not handled');
 
   // A page (content script) may not pause a tab.
-  const denied = await ask({ type: 'GAF_SET_TAB_PAUSE', tabId: 12, paused: true }, { tab: { id: 12 } });
+  const denied = await send({ type: 'GAF_SET_TAB_PAUSE', tabId: 12, paused: true }, { tab: { id: 12 } });
   assert.equal(denied.ok, false);
+  assert.equal(await tabPause.isPaused(12), false);
 
   // The popup (no sender.tab) pauses tab 12; its frames are told to re-read.
-  const ok = await ask({ type: 'GAF_SET_TAB_PAUSE', tabId: 12, paused: true, url: 'https://shop.example/' });
+  const ok = await send({ type: 'GAF_SET_TAB_PAUSE', tabId: 12, paused: true, url: 'https://shop.example/' });
   assert.equal(ok.ok, true);
-  assert.deepEqual(sent.at(-1), [12, 'GAF_TAB_PAUSE_CHANGED']);
+  assert.deepEqual(notified, [12]);
+  assert.ok(chromeApi.badges.some(([k, text, tabId]) => k === 'text' && text === TAB_PAUSE_BADGE.text && tabId === 12));
 
   // Any frame in tab 12 sees the pause; a frame in tab 13 does not, even if it asks about 12.
-  assert.equal((await ask({ type: 'GAF_TAB_PAUSE_STATE' }, { tab: { id: 12 }, frameId: 3 })).paused, true);
-  assert.equal((await ask({ type: 'GAF_TAB_PAUSE_STATE', tabId: 12 }, { tab: { id: 13 } })).paused, false);
+  assert.equal((await send({ type: 'GAF_TAB_PAUSE_STATE' }, { tab: { id: 12 }, frameId: 3 })).paused, true);
+  assert.equal((await send({ type: 'GAF_TAB_PAUSE_STATE', tabId: 12 }, { tab: { id: 13 } })).paused, false);
+  // The popup may ask about a specific tab.
+  assert.equal((await send({ type: 'GAF_TAB_PAUSE_STATE', tabId: 12 })).paused, true);
 
-  // Closing the tab clears it.
-  listeners.tabRemoved.forEach((fn) => fn(12));
-  await new Promise((r) => setTimeout(r, 0));
-  assert.equal((await ask({ type: 'GAF_TAB_PAUSE_STATE' }, { tab: { id: 12 } })).paused, false);
-  delete globalThis.chrome;
+  // Resume clears it.
+  await send({ type: 'GAF_SET_TAB_PAUSE', tabId: 12, paused: false });
+  assert.equal(await tabPause.isPaused(12), false);
+});
+
+test('service worker delegates pause messages and clears pauses on tab close', () => {
+  // Static check: the worker itself is not loadable in Node 18 (ESM in a .js file).
+  const src = readFileSync(new URL('../src/background/service-worker.js', import.meta.url), 'utf8');
+  assert.match(src, /handleTabPauseMessage\(message, _sender/);
+  assert.match(src, /onRemoved\.addListener\(\(tabId\) => \{[\s\S]*?tabPause\.forgetTab\(tabId\)/);
+  assert.match(src, /repaintPausedBadges\(\)/);
 });

@@ -24,7 +24,7 @@ import {
 } from '../core/exclusions.mjs';
 import { createMeterResetter } from './meter-actions.mjs';
 import { paintActionBadge, isBadgeOn } from '../core/badge.mjs';
-import { createTabPause } from '../core/tab-pause.mjs';
+import { createTabPause, handleTabPauseMessage } from '../core/tab-pause.mjs';
 
 const MENU_ARCHIVE = 'gaf-archive-object';
 const MENU_EXCLUDE = 'gaf-exclude-site';
@@ -279,35 +279,13 @@ chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  // Content scripts (any frame) ask whether their tab is paused.
-  if (message?.type === 'GAF_TAB_PAUSE_STATE') {
-    // A content script only ever learns about its own tab.
-    const tabId = _sender?.tab ? _sender.tab.id : message.tabId;
-    tabPause
-      .isPaused(tabId)
-      .then((paused) => sendResponse({ ok: true, paused }))
-      .catch(() => sendResponse({ ok: true, paused: false }));
-    return true;
-  }
-
-  // Popup: pause / resume filtering on one tab.
-  if (message?.type === 'GAF_SET_TAB_PAUSE') {
-    // Only extension pages (the popup) may pause a tab, never a content script.
-    if (_sender?.tab) {
-      sendResponse({ ok: false, error: 'not-allowed-from-page' });
-      return false;
-    }
-    const tabId = message.tabId;
-    tabPause
-      .setPaused(tabId, Boolean(message.paused), { url: message.url })
-      .then(async (result) => {
-        if (result.ok) {
-          await tabPause.paintTabBadge(tabId, result.paused);
-          await notifyTabPauseChanged(tabId);
-        }
-        sendResponse(result);
-      })
-      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+  // Per-tab pause (popup) and pause-state queries (content scripts).
+  const pauseReply = handleTabPauseMessage(message, _sender, {
+    tabPause,
+    notifyTab: notifyTabPauseChanged,
+  });
+  if (pauseReply) {
+    pauseReply.then(sendResponse);
     return true;
   }
 
