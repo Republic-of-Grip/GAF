@@ -102,6 +102,16 @@
             <textarea id="hideRules" rows="5" spellcheck="false" placeholder=".annoying-banner&#10;#modal-newsletter"></textarea>
             <p class="hint">One CSS selector per line.</p>
           </label>
+
+          <label class="field stack">
+            <strong>Left alone (allowed elements)</strong>
+            <textarea id="allowRules" rows="5" spellcheck="false" placeholder="example.com#@#figure.hero &gt; img"></textarea>
+            <p class="hint">
+              GAF does not freeze or pause these elements. Add one by right-clicking it →
+              <em>GAF: Leave this element alone</em>. One rule per line as <code>site#@#selector</code>
+              (uBlock exception syntax); delete a line to filter that element again.
+            </p>
+          </label>
         </section>
 
         <section class="card tab-panel" data-panel="time">

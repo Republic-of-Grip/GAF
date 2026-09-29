@@ -8,6 +8,7 @@
   const PREVIEW_ID = 'gaf-preview-video-early';
 
   // Keep in sync with src/core/css-motion.mjs MODERATE_CSS / STRICT_CSS / INTERACTIVE_UI_PROTECT_CSS
+  // Elements the user allowed ([data-gaf-allow], element-allow.mjs) are excluded from the kill rules.
   // Do not revert opacity/visibility/transform/pointer-events here — unlayered
   // revert-layer forces UA visible defaults and unhides closed POWER.no dialogs.
   const INTERACTIVE_UI_PROTECT_CSS = `
@@ -67,9 +68,9 @@ html.gaf-motion-active *::before,
 html.gaf-motion-active *::after {
   scroll-behavior: auto !important;
 }
-html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas),
-html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas)::before,
-html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas)::after {
+html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas):not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas):not([data-gaf-allow]):not([data-gaf-allow] *)::before,
+html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas):not([data-gaf-allow]):not([data-gaf-allow] *)::after {
   animation-iteration-count: 1 !important;
 }
 html.gaf-motion-active img,
@@ -90,9 +91,9 @@ ${INTERACTIVE_UI_PROTECT_CSS}
 `.trim();
 
   const STRICT_CSS = `
-html.gaf-motion-active *,
-html.gaf-motion-active *::before,
-html.gaf-motion-active *::after {
+html.gaf-motion-active *:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active *:not([data-gaf-allow]):not([data-gaf-allow] *)::before,
+html.gaf-motion-active *:not([data-gaf-allow]):not([data-gaf-allow] *)::after {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
   animation-delay: 0s !important;
@@ -100,10 +101,10 @@ html.gaf-motion-active *::after {
   transition-delay: 0s !important;
   scroll-behavior: auto !important;
 }
-html.gaf-motion-active img,
-html.gaf-motion-active picture,
-html.gaf-motion-active video,
-html.gaf-motion-active canvas {
+html.gaf-motion-active img:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active picture:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active video:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active canvas:not([data-gaf-allow]):not([data-gaf-allow] *) {
   animation: none !important;
   transition: none !important;
   opacity: 1 !important;

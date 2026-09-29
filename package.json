@@ -1,6 +1,6 @@
 {
   "name": "gaf",
-  "version": "0.2.32",
+  "version": "0.2.33",
   "private": true,
   "description": "GAF — General Annoyance Filter. Personal Chromium web filter.",
   "scripts": {

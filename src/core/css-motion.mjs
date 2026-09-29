@@ -85,9 +85,9 @@ html.gaf-motion-active *::after {
 }
 
 /* Infinite / marquee-style only: force a single iteration so they settle */
-html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas),
-html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas)::before,
-html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas)::after {
+html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas):not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas):not([data-gaf-allow]):not([data-gaf-allow] *)::before,
+html.gaf-motion-active *:not(img):not(picture):not(video):not(source):not(canvas):not([data-gaf-allow]):not([data-gaf-allow] *)::after {
   animation-iteration-count: 1 !important;
 }
 
@@ -113,9 +113,9 @@ ${INTERACTIVE_UI_PROTECT_CSS}
 /** Strict: near-total freeze — may still break some image reveals; use carefully. */
 export const STRICT_CSS = `
 /* GAF strict motion filter */
-html.gaf-motion-active *,
-html.gaf-motion-active *::before,
-html.gaf-motion-active *::after {
+html.gaf-motion-active *:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active *:not([data-gaf-allow]):not([data-gaf-allow] *)::before,
+html.gaf-motion-active *:not([data-gaf-allow]):not([data-gaf-allow] *)::after {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
   animation-delay: 0s !important;
@@ -125,10 +125,10 @@ html.gaf-motion-active *::after {
 }
 
 /* Still protect photos from being left invisible */
-html.gaf-motion-active img,
-html.gaf-motion-active picture,
-html.gaf-motion-active video,
-html.gaf-motion-active canvas {
+html.gaf-motion-active img:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active picture:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active video:not([data-gaf-allow]):not([data-gaf-allow] *),
+html.gaf-motion-active canvas:not([data-gaf-allow]):not([data-gaf-allow] *) {
   animation: none !important;
   transition: none !important;
   opacity: 1 !important;

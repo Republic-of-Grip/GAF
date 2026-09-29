@@ -121,8 +121,21 @@ function copyVisualStyle(source, target) {
   target.style.verticalAlign = source.style.verticalAlign || 'middle';
 }
 
+/** User chose "Leave this element alone" on this node or an ancestor. */
+function isUserAllowed(el) {
+  try {
+    return Boolean(el?.closest?.('[data-gaf-allow]'));
+  } catch {
+    return false;
+  }
+}
+
 export function freezeAnimatedImageElement(img, options = {}) {
   if (!img || img.dataset?.gafIgnore === '1') return false;
+  if (isUserAllowed(img)) {
+    if (img.dataset?.gafFrozen === 'image') restoreImage(img);
+    return false;
+  }
 
   const url = img.currentSrc || img.src || img.getAttribute?.('src') || '';
   const includeModern = options.includeModern === true;
@@ -249,6 +262,10 @@ function previewElementSrc(element) {
 export function freezePreviewVideoElement(element) {
   if (!isCustomPreviewVideoElement(element)) return false;
   if (element.dataset?.gafIgnore === '1') return false;
+  if (isUserAllowed(element)) {
+    if (element.dataset?.gafFrozen === 'preview-video') restorePreviewVideo(element);
+    return false;
+  }
 
   const srcNow = previewElementSrc(element);
   const already = element.dataset?.gafFrozen === 'preview-video';
@@ -584,6 +601,20 @@ export function isMediaInsideInteractiveChrome(el) {
 export function freezeVideoElement(video, options = {}) {
   if (!video) return false;
   if (video.dataset?.gafIgnore === '1' || video.dataset?.gafUserPlay === '1') return false;
+  if (isUserAllowed(video)) {
+    if (video.dataset?.gafFrozen === 'video') {
+      restoreVideo(video);
+      // Frozen autoplay loops were stopped by GAF; start them again.
+      if (video.autoplay) {
+        try {
+          video.play?.()?.catch?.(() => {});
+        } catch {
+          /* autoplay policy may refuse; the page can still start it */
+        }
+      }
+    }
+    return false;
+  }
   // Never gut media inside open modals / photo viewers / compose
   if (isMediaInsideInteractiveChrome(video)) return false;
 
