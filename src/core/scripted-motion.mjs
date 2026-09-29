@@ -40,6 +40,8 @@ export function shouldSkipAnimation(anim) {
   if (!anim) return true;
   try {
     const target = anim.effect?.target;
+    // User chose "Leave this element alone" for it or an ancestor.
+    if (target?.nodeType === 1 && target.closest?.('[data-gaf-allow]')) return true;
     if (target?.nodeType === 1) {
       const tag = target.tagName;
       if (MEDIA_TAGS.has(tag)) return true;
@@ -128,6 +130,7 @@ export function pauseSvgAnimations(root = globalThis.document) {
       try {
         // Don't pause SVGs that wrap or sit inside image cards with <image href>
         if (svg.querySelector?.('image[href], image[*|href]')) continue;
+        if (svg.closest?.('[data-gaf-allow]')) continue;
         // Leave modal / dialog icons alone (Alpine cookie, auth, cart chrome)
         if (
           typeof svg.closest === 'function' &&
@@ -169,6 +172,7 @@ export function pauseKnownPlayers(root = globalThis.document) {
     for (const sel of selectors) {
       for (const el of root.querySelectorAll(sel)) {
         try {
+          if (el.closest?.('[data-gaf-allow]')) continue;
           if (typeof el.pause === 'function' && typeof el.play === 'function' &&
               (el.isPaused === false || el.paused === false || el.currentState === 'playing')) {
             el.pause();
@@ -184,6 +188,55 @@ export function pauseKnownPlayers(root = globalThis.document) {
     }
   } catch {
     // ignore
+  }
+  return count;
+}
+
+/**
+ * Resume motion GAF paused inside elements the user has since allowed.
+ * @returns {number} count resumed
+ */
+export function resumeAllowedScriptedMotion(root = globalThis.document) {
+  const doc = root?.ownerDocument || root;
+  const state = pausedByGaf.get(doc);
+  if (!state) return 0;
+  let count = 0;
+  const allowed = (el) => {
+    try {
+      return Boolean(el?.closest?.('[data-gaf-allow]'));
+    } catch {
+      return false;
+    }
+  };
+  for (const anim of [...state.animations]) {
+    if (!allowed(anim.effect?.target)) continue;
+    try {
+      if (anim.playState === 'paused') anim.play();
+    } catch {
+      /* disposed */
+    }
+    state.animations.delete(anim);
+    count += 1;
+  }
+  for (const svg of [...state.svgs]) {
+    if (!allowed(svg)) continue;
+    try {
+      if (svg.animationsPaused()) svg.unpauseAnimations();
+    } catch {
+      /* disposed */
+    }
+    state.svgs.delete(svg);
+    count += 1;
+  }
+  for (const player of [...state.players]) {
+    if (!allowed(player)) continue;
+    try {
+      player.play();
+    } catch {
+      /* disposed */
+    }
+    state.players.delete(player);
+    count += 1;
   }
   return count;
 }

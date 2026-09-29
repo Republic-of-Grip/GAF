@@ -15,6 +15,7 @@ import {
   saveArchive,
 } from '../core/storage.mjs';
 import { updateExclusion, removeExclusion } from '../core/exclusions.mjs';
+import { formatAllowRules, parseAllowRules } from '../core/element-allow.mjs';
 import {
   hideRuleCandidatesFromEntry,
   pickBestHideCandidate,
@@ -43,6 +44,7 @@ function fill(s) {
   $('elementHiding').checked = s.elementHiding;
   $('useDefaultHideRules').checked = s.useDefaultHideRules;
   $('hideRules').value = (s.hideRules || []).join('\n');
+  $('allowRules').value = formatAllowRules(s.allowRules);
   $('timeFreezeMode').value = s.timeFreezeMode;
   $('timeFreezeScope').value = s.timeFreezeScope || 'softwall';
   $('timeFreezeSlowFactor').value = s.timeFreezeSlowFactor;
@@ -88,6 +90,7 @@ function read() {
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean),
+    allowRules: parseAllowRules($('allowRules').value),
     timeFreezeMode: $('timeFreezeMode').value,
     timeFreezeScope: $('timeFreezeScope').value,
     timeFreezeSlowFactor: Number($('timeFreezeSlowFactor').value),

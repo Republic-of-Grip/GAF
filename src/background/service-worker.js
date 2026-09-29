@@ -25,7 +25,9 @@ import {
 import { createMeterResetter } from './meter-actions.mjs';
 import { paintActionBadge, isBadgeOn } from '../core/badge.mjs';
 import { createTabPause, handleTabPauseMessage } from '../core/tab-pause.mjs';
+import { addAllowRule } from '../core/element-allow.mjs';
 
+const MENU_ALLOW = 'gaf-allow-element';
 const MENU_ARCHIVE = 'gaf-archive-object';
 const MENU_EXCLUDE = 'gaf-exclude-site';
 const MENU_SNAPSHOT = 'gaf-snapshot-page';
@@ -103,6 +105,11 @@ async function broadcastSettings(settings) {
 function ensureContextMenus() {
   try {
     chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        id: MENU_ALLOW,
+        title: 'GAF: Leave this element alone (remember on this site)',
+        contexts: ['all'],
+      });
       chrome.contextMenus.create({
         id: MENU_ARCHIVE,
         title: 'GAF: Save object for inspection',
@@ -190,6 +197,32 @@ try {
 
 chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
+
+  if (info.menuItemId === MENU_ALLOW) {
+    try {
+      const frameId = Number.isInteger(info.frameId) ? info.frameId : TOP_FRAME_ID;
+      const response = await chrome.tabs.sendMessage(
+        tab.id,
+        { type: 'GAF_ALLOW_ELEMENT' },
+        { frameId },
+      );
+      if (response?.ok) {
+        const settings = await loadSettings();
+        const next = await saveSettings({
+          allowRules: addAllowRule(settings.allowRules, response.host, response.selector),
+        });
+        await broadcastSettings(next);
+        await chrome.action.setBadgeText({ text: 'OK', tabId: tab.id });
+      } else {
+        console.warn('[GAF] allow element failed', response?.error);
+        await chrome.action.setBadgeText({ text: '!', tabId: tab.id });
+      }
+      scheduleBadgeRestore(1200);
+    } catch (e) {
+      console.warn('[GAF] allow element message failed', e);
+    }
+    return;
+  }
 
   if (info.menuItemId === MENU_ARCHIVE) {
     try {

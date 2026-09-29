@@ -6,7 +6,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.32)
+## Features (v0.2.33)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -21,6 +21,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 | Custom CSS per host | On (empty map) | Options → Advanced |
 | **Pause on this tab** | — | Popup button: stop filtering in one tab only, until you resume or close it |
 | Exclusion backlog | — | Exclude site → review / resolve later |
+| **Leave this element alone** | — | Right-click an object: GAF stops freezing / pausing it on that site (the reverse of uBlock's *Block element*) |
 | Inspection archive | — | Right-click: save object + escape hints → promote to hide rule |
 | Import / export | — | Filter pack JSON |
 
@@ -99,6 +100,16 @@ Resolved entries stop excluding; they remain as history until removed.
 
 OFF/exclusion cancels queued meter actions and restores tracked meter styles, media, and scripted animations. Reload the page to fully restore existing stretched timers, replaced custom elements, and page-managed state. Completed cookie/storage deletion and consent choices cannot be undone by the switch. A deletion already in flight may complete; current policy is checked again before each subsequent action.
 
+## Leave this element alone
+
+The reverse of uBlock Origin's *Block element*: when GAF freezes something you actually want moving — a GIF, a looping video, an animation — right-click it → **GAF: Leave this element alone (remember on this site)**.
+
+- That element (and everything inside it) plays and animates normally. The rest of the page stays filtered.
+- The choice is remembered for the site and applies on every visit. The toolbar flashes **OK** when a rule is saved.
+- Right-clicking a frozen GIF works: the rule points at the real image behind GAF's still frame.
+- Manage the rules in **Options → Element hiding → Left alone**, one per line in uBlock's exception syntax, e.g. `example.com#@#figure.hero > img`. Delete a line to have GAF filter that element again.
+- Rules are CSS selectors built from the element's position and classes. Sites that rename their classes on redesigns can break a rule; add it again from the right-click menu.
+
 ## Inspection archive
 
 1. Right-click an annoying/escaping object  
@@ -117,7 +128,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
@@ -178,6 +189,7 @@ gaf/
       time-freeze.mjs
       storage.mjs
       tab-pause.mjs         # per-tab pause (session storage, ends when the tab closes)
+      element-allow.mjs     # "Leave this element alone" rules (site#@#selector)
     popup/
     options/
     update/               # download GitHub zip into the existing unpacked folder
@@ -188,7 +200,7 @@ gaf/
 
 Settings are stored locally and mirrored, best-effort, to `chrome.storage.sync`. On browsers with account sync enabled, that mirror may be uploaded and shared across your synced browsers. Local settings remain authoritative; sync is also used as a legacy fallback when local settings are missing.
 
-The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records and per-tab pauses (tab id plus the page URL at the time you paused) stay in `chrome.storage.session`, which the browser clears on restart. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes. Review these before sharing them or attaching them to public issues.
+The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records and per-tab pauses (tab id plus the page URL at the time you paused) stay in `chrome.storage.session`, which the browser clears on restart. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes, and your settings, including *Leave this element alone* rules (site names and element selectors), which are also part of the settings sync mirror. Review these before sharing them or attaching them to public issues.
 
 No analytics or remotely downloaded filter rules. **Check for updates** contacts GitHub for version metadata. **Update** downloads the published GAF source ZIP from GitHub into your existing unpacked folder. Applying it is the Extensions-page **Reload** on the GAF card. That is user-initiated extension code from this repository, not remote filter rules.
 

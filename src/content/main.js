@@ -45,6 +45,7 @@ function loadCore() {
       import(chrome.runtime.getURL('src/core/interaction-guard.mjs')),
       import(chrome.runtime.getURL('src/core/meter-reset.mjs')),
       import(chrome.runtime.getURL('src/core/tab-pause.mjs')),
+      import(chrome.runtime.getURL('src/core/element-allow.mjs')),
     ]).then((mods) => {
       coreModule = Object.assign({}, ...mods);
       return coreModule;
@@ -154,6 +155,9 @@ async function applyAll() {
   }
 
   pushTimeFreezeConfig(core, s, url);
+
+  // "Leave this element alone" rules: mark before any freeze pass runs.
+  applyAllowRules(core, s);
 
   if (!isPopupWindow() && core.shouldApplyMotionOnPage(url, s, exclusionHosts)) {
     core.applyMotionStyle(document, s.motionLevel);
@@ -486,6 +490,50 @@ function frozenVideoClickHandler(event) {
   }
 }
 
+/** Mark allowed elements for this document and release anything GAF froze in them. */
+function applyAllowRules(core, s) {
+  try {
+    const selectors = core.allowSelectorsForHost(s.allowRules, location.hostname);
+    const added = core.syncAllowMarks(document, selectors);
+    if (added.length) releaseAllowed(core);
+  } catch {
+    /* a bad rule must not stop filtering */
+  }
+}
+
+/** Undo freezes / pauses GAF already applied inside allowed elements. */
+function releaseAllowed(core) {
+  const frozen = Array.from(document.querySelectorAll('[data-gaf-frozen]')).filter((el) =>
+    core.isAllowedElement(el),
+  );
+  if (frozen.length) core.restoreFrozenMedia(frozen);
+  for (const video of frozen) {
+    if (video.tagName === 'VIDEO' && video.autoplay) {
+      try {
+        video.play?.()?.catch?.(() => {});
+      } catch {
+        /* autoplay policy */
+      }
+    }
+  }
+  core.resumeAllowedScriptedMotion(document);
+}
+
+/** Right-click → "Leave this element alone": mark it now, return the rule to save. */
+async function allowLastContextElement() {
+  const core = await loadCore();
+  const target = core.pickAllowTarget(lastContextElement);
+  if (!target) {
+    return { ok: false, error: 'No element under cursor. Right-click the object again.' };
+  }
+  const selector = core.allowSelectorFor(target);
+  const host = core.normalizeHost(location.hostname);
+  if (!selector || !host) return { ok: false, error: 'Could not build a rule for this element.' };
+  target.setAttribute(core.ALLOW_ATTR, '');
+  releaseAllowed(core);
+  return { ok: true, host, selector };
+}
+
 function contextMenuTrackHandler(event) {
   lastContextElement = event.target;
 }
@@ -691,6 +739,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'GAF_RUN_NOW') {
     applyAll()
       .then((r) => sendResponse({ ok: true, result: r }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (message?.type === 'GAF_ALLOW_ELEMENT') {
+    allowLastContextElement()
+      .then((r) => sendResponse(r))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }

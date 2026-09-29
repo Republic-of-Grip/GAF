@@ -213,6 +213,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   hideRules: [],
   useDefaultHideRules: true,
 
+  /**
+   * "Leave this element alone" rules: [{ host, selector }]. GAF does not
+   * freeze or pause matching elements. See element-allow.mjs.
+   */
+  allowRules: [],
+
   /** Per-host custom CSS ON by default (map may be empty) */
   customCss: true,
   siteCss: {},
@@ -324,6 +330,13 @@ export function normalizeSettings(raw) {
 
   base.hideRules = Array.isArray(base.hideRules)
     ? base.hideRules.filter((r) => typeof r === 'string' && r.trim())
+    : [];
+  // Shape check only; element-allow.mjs normalizeAllowRules dedupes and caps.
+  base.allowRules = Array.isArray(base.allowRules)
+    ? base.allowRules
+        .filter((r) => r && typeof r.host === 'string' && typeof r.selector === 'string')
+        .map((r) => ({ host: normalizeHost(r.host), selector: r.selector.trim() }))
+        .filter((r) => r.host && r.selector && !/[{}]/.test(r.selector))
     : [];
   base.siteCss = base.siteCss && typeof base.siteCss === 'object' ? base.siteCss : {};
   base.features = {
