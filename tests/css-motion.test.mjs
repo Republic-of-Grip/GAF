@@ -67,8 +67,8 @@ test('motion CSS protects dialog/overlay chrome (ditur grey-screen regression)',
   assert.match(MODERATE_CSS, /#nav-backdrop/);
   assert.match(MODERATE_CSS, /#cookie-form/);
   assert.match(MODERATE_CSS, /\.bg-image-overlay/);
-  assert.match(MODERATE_CSS, /iframe\[src\*=["']bankid\.no["']\]/);
-  assert.match(MODERATE_CSS, /morrowbank\.no/);
+  // Embedded frames (checkout / 3-D Secure / captcha) keep their own animations
+  assert.match(MODERATE_CSS, /html\.gaf-motion-active iframe \{/);
   assert.match(STRICT_CSS, /\[role="dialog"\]/);
   assert.match(MODERATE_CSS, /animation-play-state:\s*running/);
   assert.match(STRICT_CSS, /transition-duration:\s*revert-layer/);

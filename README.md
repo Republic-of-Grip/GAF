@@ -6,7 +6,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.30)
+## Features (v0.2.31)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -69,7 +69,7 @@ Built-in soft-wall hosts include `spiked-online.com` and the usual newspaper lis
 | Login / cart / filter panel with real UI | Left alone |
 | **X.com / Twitter compose & reply** | Tool-SPA host — unstick + CSS motion skipped so the mask is not treated as a cookie grey (clicks no longer fall through to the timeline). GIF freeze still runs on the feed. |
 | **X.com photo / status lightbox** | Media inside dialogs is not source-stripped (avoids stacked/garbled conversation column). Toggling GAF **off** now restores unstick hides without a full page reload. |
-| **BankID / Morrow payment auth** | First-party 3DS / BankID windows and iframes are left alone so card verification can open. Ads and unrelated popups stay blocked. |
+| **Checkout, 3-D Secure, eID, captcha** | A full-viewport layer that hosts a visible iframe is never treated as an empty grey: cross-origin frames have no readable text, so GAF cannot tell a card-verification window from an ad scrim and leaves it alone. Pages with a password, one-time-code or card field, and popup windows (verification and sign-in flows), are never unstuck. Orphan-dimmer hiding runs in the top page only, and timer stretch never runs in frames or popups. Known payment, 3-D Secure, eID and captcha provider hosts (Stripe, PayPal, Adyen, Klarna, Vipps, Cardinal, ID-porten, MitID, hCaptcha, Cloudflare Turnstile and others) also skip motion CSS and scripted-motion pause. |
 
 Earlier versions were tested live against Ditur's “Godta valgte” flow. Version 0.2.28 deliberately leaves that ambiguous choice to you; selected categories are not assumed to be necessary-only. No consent cookie or consent event is fabricated by the automatic handlers.
 
@@ -106,7 +106,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
