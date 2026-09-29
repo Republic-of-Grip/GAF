@@ -6,7 +6,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.31)
+## Features (v0.2.32)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -19,6 +19,7 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 | **Meter reset** | **Auto** | Disarm free-article gates; auto wipe is meter-named cookies only, with corroborating wall evidence |
 | Element hiding | On | Built-in soft-paywall / regwall selectors + your rules |
 | Custom CSS per host | On (empty map) | Options → Advanced |
+| **Pause on this tab** | — | Popup button: stop filtering in one tab only, until you resume or close it |
 | Exclusion backlog | — | Exclude site → review / resolve later |
 | Inspection archive | — | Right-click: save object + escape hints → promote to hide rule |
 | Import / export | — | Filter pack JSON |
@@ -73,6 +74,16 @@ Built-in soft-wall hosts include `spiked-online.com` and the usual newspaper lis
 
 Earlier versions were tested live against Ditur's “Godta valgte” flow. Version 0.2.28 deliberately leaves that ambiguous choice to you; selected categories are not assumed to be necessary-only. No consent cookie or consent event is fabricated by the automatic handlers.
 
+## Pause on this tab
+
+For a one-off step that GAF gets in the way of — a checkout, a bank or 3-D Secure check, a sign-in — use **Pause on this tab** in the popup instead of turning GAF off everywhere.
+
+- Filtering stops in that tab only (all frames in it). Every other tab keeps filtering.
+- The pause survives navigation inside the tab, so a checkout that redirects to your bank and back stays paused.
+- It ends when you click **Resume on this tab**, close the tab, or restart the browser. Nothing is saved to settings.
+- The toolbar shows an orange **II** badge on a paused tab.
+- As with turning GAF off, reload the page if you need stretched timers or already-replaced page components fully restored.
+
 ## Exclusion backlog
 
 When GAF breaks a site:
@@ -106,7 +117,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
@@ -166,6 +177,7 @@ gaf/
       site-css.mjs
       time-freeze.mjs
       storage.mjs
+      tab-pause.mjs         # per-tab pause (session storage, ends when the tab closes)
     popup/
     options/
     update/               # download GitHub zip into the existing unpacked folder
@@ -176,7 +188,7 @@ gaf/
 
 Settings are stored locally and mirrored, best-effort, to `chrome.storage.sync`. On browsers with account sync enabled, that mirror may be uploaded and shared across your synced browsers. Local settings remain authoritative; sync is also used as a legacy fallback when local settings are missing.
 
-The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records stay in `chrome.storage.session`. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes. Review these before sharing them or attaching them to public issues.
+The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records and per-tab pauses (tab id plus the page URL at the time you paused) stay in `chrome.storage.session`, which the browser clears on restart. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes. Review these before sharing them or attaching them to public issues.
 
 No analytics or remotely downloaded filter rules. **Check for updates** contacts GitHub for version metadata. **Update** downloads the published GAF source ZIP from GitHub into your existing unpacked folder. Applying it is the Extensions-page **Reload** on the GAF card. That is user-initiated extension code from this repository, not remote filter rules.
 

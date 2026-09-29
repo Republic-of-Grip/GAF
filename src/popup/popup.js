@@ -11,6 +11,8 @@ let settings = null;
 let exclusions = [];
 let currentHost = '';
 let currentUrl = '';
+let currentTabId = null;
+let tabPaused = false;
 
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -72,9 +74,12 @@ function updateStatus(s, host) {
   const policy = host
     ? resolveSitePolicy(`https://${host}/`, s, hosts)
     : { active: s.enabled, reason: 'default' };
-  const on = s.enabled && policy.active;
+  const on = s.enabled && policy.active && !tabPaused;
   let extra = '';
-  if (!s.enabled) {
+  if (s.enabled && tabPaused) {
+    extra =
+      'Paused on this tab until you resume or close it. Reload the page to fully restore timers and site components.';
+  } else if (!s.enabled) {
     extra =
       'Filtering is off. Reload this page to fully restore timers and site components.';
   } else if (policy.reason === 'excluded') {
@@ -84,7 +89,13 @@ function updateStatus(s, host) {
 
   $('statusLine').innerHTML = on
     ? `<strong>Filtering</strong> — ${extra}`
-    : `<strong style="color:#b45309">Idle</strong> — ${extra}`;
+    : `<strong style="color:#b45309">${s.enabled && tabPaused ? 'Paused' : 'Idle'}</strong> — ${extra}`;
+
+  const pauseBtn = $('pauseTab');
+  if (pauseBtn) {
+    pauseBtn.textContent = tabPaused ? 'Resume on this tab' : 'Pause on this tab';
+    pauseBtn.disabled = currentTabId == null || !host;
+  }
 
   paintMasterChrome(s.enabled);
 
@@ -165,7 +176,34 @@ async function init() {
   const tab = await getActiveTab();
   currentHost = hostFromTab(tab);
   currentUrl = tab?.url || '';
+  currentTabId = Number.isInteger(tab?.id) ? tab.id : null;
+  if (currentTabId != null) {
+    try {
+      const r = await chrome.runtime.sendMessage({ type: 'GAF_TAB_PAUSE_STATE', tabId: currentTabId });
+      tabPaused = Boolean(r?.paused);
+    } catch {
+      tabPaused = false;
+    }
+  }
   updateStatus(settings, currentHost);
+
+  $('pauseTab').addEventListener('click', async () => {
+    if (currentTabId == null) return;
+    const next = !tabPaused;
+    try {
+      const r = await chrome.runtime.sendMessage({
+        type: 'GAF_SET_TAB_PAUSE',
+        tabId: currentTabId,
+        paused: next,
+        url: currentUrl,
+      });
+      if (!r?.ok) throw new Error(r?.error || 'unknown');
+      tabPaused = next;
+      updateStatus(settings, currentHost);
+    } catch (e) {
+      $('statusLine').textContent = `Could not ${next ? 'pause' : 'resume'}: ${e?.message || e}`;
+    }
+  });
 
   const saveFromForm = () => persist(readForm());
 

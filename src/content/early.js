@@ -373,7 +373,7 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
     'spiked-online.com',
   ];
 
-  function finishLoad(rawSettings, localData) {
+  function finishLoadRaw(rawSettings, localData) {
     const settings = { ...(rawSettings && typeof rawSettings === 'object' ? rawSettings : {}) };
     // Default master switch ON when never saved (matches DEFAULT_SETTINGS)
     if (settings.enabled === undefined) settings.enabled = true;
@@ -391,7 +391,27 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
     applyBundle(settings, hosts);
   }
 
+  // Paused on this tab (popup) behaves like master off for this tab only.
+  // Keep in sync with core/tab-pause.mjs effectiveSettingsForTab.
+  function withTabPause(finish) {
+    return (rawSettings, localData) => {
+      const done = (paused) => {
+        const s = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+        finish(paused ? { ...s, enabled: false } : s, localData);
+      };
+      try {
+        chrome.runtime.sendMessage({ type: 'GAF_TAB_PAUSE_STATE' }, (r) => {
+          void chrome.runtime.lastError;
+          done(Boolean(r?.paused));
+        });
+      } catch {
+        done(false);
+      }
+    };
+  }
+
   function loadAll() {
+    const finishLoad = withTabPause(finishLoadRaw);
     try {
       // Local-first (same as storage.mjs) — Helium sync is unreliable for unpacked
       chrome.storage.local.get({ gafSettings: null, gafExclusions: [] }, (localData) => {
@@ -430,7 +450,7 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
 
   try {
     chrome.runtime.onMessage.addListener((message) => {
-      if (message?.type === 'GAF_SETTINGS') {
+      if (message?.type === 'GAF_SETTINGS' || message?.type === 'GAF_TAB_PAUSE_CHANGED') {
         loadAll();
       }
       if (message?.type === 'GAF_TIME_FREEZE_CONFIG') {

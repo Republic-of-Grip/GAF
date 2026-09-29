@@ -24,6 +24,7 @@ import {
 } from '../core/exclusions.mjs';
 import { createMeterResetter } from './meter-actions.mjs';
 import { paintActionBadge, isBadgeOn } from '../core/badge.mjs';
+import { createTabPause, handleTabPauseMessage } from '../core/tab-pause.mjs';
 
 const MENU_ARCHIVE = 'gaf-archive-object';
 const MENU_EXCLUDE = 'gaf-exclude-site';
@@ -38,8 +39,21 @@ function sendToTopFrame(tabId, message) {
   return chrome.tabs.sendMessage(tabId, message, { frameId: TOP_FRAME_ID });
 }
 
+const tabPause = createTabPause({ chromeApi: chrome });
+
 async function updateBadge(enabled) {
   await paintActionBadge(enabled);
+  // paintActionBadge clears every per-tab badge; put paused-tab markers back.
+  await tabPause.repaintPausedBadges();
+}
+
+/** Tell every frame in one tab to re-read its pause state. */
+async function notifyTabPauseChanged(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'GAF_TAB_PAUSE_CHANGED' });
+  } catch {
+    /* no content script (chrome:// pages, closed tab) */
+  }
 }
 
 /** Re-read storage and refresh badge (service worker restarts leave stale OFF). */
@@ -128,6 +142,7 @@ const { resetMeterForTab, resetMeterFromMessage } = createMeterResetter({
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove(`gafMeterAttempts:${tabId}`).catch(() => {});
+  tabPause.forgetTab(tabId).catch(() => {});
 });
 
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -264,6 +279,16 @@ chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // Per-tab pause (popup) and pause-state queries (content scripts).
+  const pauseReply = handleTabPauseMessage(message, _sender, {
+    tabPause,
+    notifyTab: notifyTabPauseChanged,
+  });
+  if (pauseReply) {
+    pauseReply.then(sendResponse);
+    return true;
+  }
+
   if (message?.type === 'GAF_SYNC_BADGE') {
     refreshBadgeFromStorage()
       .then((s) => sendResponse({ ok: true, enabled: isBadgeOn(s?.enabled), text: isBadgeOn(s?.enabled) ? 'ON' : 'OFF' }))
