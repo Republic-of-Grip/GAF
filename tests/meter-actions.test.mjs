@@ -6,7 +6,8 @@ import { normalizeSettings } from '../src/core/settings.mjs';
 const url = 'https://www.spiked-online.com/2026/09/11/example-story/';
 function fixture() {
   const state = { settings: normalizeSettings({}), exclusions: [], url, session: {}, effects: [],
-    evidence: true, onReadCookies: null, onRemoveCookie: null, sessionUnavailable: false };
+    evidence: true, onReadCookies: null, onRemoveCookie: null, sessionUnavailable: false,
+    paused: false };
   const chromeApi = {
     tabs: {
       get: async () => ({ id: 7, url: state.url }),
@@ -38,7 +39,12 @@ function fixture() {
       remove: async (details) => { state.effects.push(details.name); state.onRemoveCookie?.(); return details; },
     },
   };
-  const deps = { chromeApi, loadSettings: async () => state.settings, getExclusionHosts: async () => state.exclusions };
+  const deps = {
+    chromeApi,
+    loadSettings: async () => state.settings,
+    getExclusionHosts: async () => state.exclusions,
+    isTabPaused: async () => state.paused,
+  };
   return { state, deps, ...createMeterResetter(deps) };
 }
 
@@ -122,6 +128,28 @@ test('automatic messages must come from the top frame and cannot target another 
   assert.equal((await f.resetMeterFromMessage({ ...message, url: 'https://example.com/' }, { tab: { id: 7 }, frameId: 0 })).error, 'page-changed');
   assert.deepEqual(f.state.effects, []);
   assert.equal((await f.resetMeterFromMessage(message, { tab: { id: 7 }, frameId: 0 })).ok, true);
+});
+
+test('automatic reset stays off while the tab is paused; a manual reset still runs', async () => {
+  const paused = fixture();
+  paused.state.paused = true;
+  const auto = await paused.resetMeterForTab(7, url, { auto: true });
+  assert.equal(auto.ok, false);
+  assert.equal(auto.error, 'tab-paused');
+  assert.deepEqual(paused.state.effects, []);
+
+  const manual = await paused.resetMeterForTab(7, url, { cookieMode: 'meter-names' });
+  assert.equal(manual.ok, true);
+  assert.ok(paused.state.effects.includes('meter_count'));
+});
+
+test('pausing during an automatic reset stops cookie deletion', async () => {
+  const f = fixture();
+  f.state.onReadCookies = () => { f.state.paused = true; };
+  const result = await f.resetMeterForTab(7, url, { auto: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'tab-paused');
+  assert.deepEqual(f.state.effects, []);
 });
 
 test('manual storage failure is reported without reloading', async () => {

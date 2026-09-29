@@ -7,7 +7,7 @@ import {
 } from '../core/meter-reset.mjs';
 
 /** One reset at a time per tab. The retry record survives page and worker reloads. */
-export function createMeterResetter({ chromeApi, loadSettings, getExclusionHosts }) {
+export function createMeterResetter({ chromeApi, loadSettings, getExclusionHosts, isTabPaused }) {
   const busy = new Set();
 
   async function resetMeterForTab(tabId, pageUrl, opts = {}) {
@@ -18,7 +18,15 @@ export function createMeterResetter({ chromeApi, loadSettings, getExclusionHosts
       const expectedUrl = new URL(pageUrl).href;
       if (!/^https?:/.test(expectedUrl)) return { ok: false, error: 'not-http' };
       let settings;
+      let blockedByPause = false;
       async function allowed() {
+        blockedByPause = false;
+        // Pause is master-off for this tab. Automatic wipes must see it;
+        // an explicit manual reset still runs.
+        if (auto && typeof isTabPaused === 'function' && (await isTabPaused(tabId))) {
+          blockedByPause = true;
+          return false;
+        }
         const [tab, current, exclusions] = await Promise.all([
           chromeApi.tabs.get(tabId), loadSettings(), getExclusionHosts(),
         ]);
@@ -28,7 +36,10 @@ export function createMeterResetter({ chromeApi, loadSettings, getExclusionHosts
           current.meterResetEnabled !== false && current.features?.meterReset !== false &&
           (!auto || shouldAutoMeterReset(expectedUrl, current, exclusions));
       }
-      if (!(await allowed())) return { ok: false, error: 'inactive-or-page-changed' };
+      function denied() {
+        return { ok: false, error: blockedByPause ? 'tab-paused' : 'inactive-or-page-changed' };
+      }
+      if (!(await allowed())) return denied();
 
       const send = (message) => chromeApi.tabs.sendMessage(tabId,
         { ...message, expectedUrl, auto }, { frameId: 0 });
@@ -44,7 +55,7 @@ export function createMeterResetter({ chromeApi, loadSettings, getExclusionHosts
           return { ok: false, error: 'already-attempted' };
         }
         await chromeApi.storage.session.set({ [key]: [...attempts, pageKey] });
-        if (!(await allowed())) return { ok: false, error: 'inactive-or-page-changed' };
+        if (!(await allowed())) return denied();
       }
 
       let disarm = null;
@@ -58,7 +69,7 @@ export function createMeterResetter({ chromeApi, loadSettings, getExclusionHosts
           return { ok: false, error: 'no-meter-evidence' };
         }
       }
-      if (!(await allowed())) return { ok: false, error: 'inactive-or-page-changed' };
+      if (!(await allowed())) return denied();
       const cookieMode = auto ? 'meter-names' : opts.cookieMode || settings.meterResetCookieMode;
       const clearStorage = !auto && Boolean(opts.clearStorage ?? settings.meterResetClearStorage);
       const clearDurable = !auto && Boolean(opts.clearDurable ?? settings.meterResetClearDurableStorage);
@@ -68,7 +79,7 @@ export function createMeterResetter({ chromeApi, loadSettings, getExclusionHosts
         canProceed: allowed,
       });
       if (cookies.error === 'cancelled' || !(await allowed())) {
-        return { ok: false, error: 'inactive-or-page-changed', cookiesRemoved: cookies.removed };
+        return { ...denied(), cookiesRemoved: cookies.removed };
       }
       let storageCleared = false;
       if (clearStorage || clearDurable) {

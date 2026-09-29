@@ -225,10 +225,14 @@
     }
   }
 
+  // Drop a stale pause reply so an older round-trip cannot turn filtering back on.
+  let refreshEpoch = 0;
   function refreshEnabledFromStorage() {
+    const epoch = ++refreshEpoch;
     try {
       chrome.storage.local.get({ gafSettings: null, gafExclusions: [] }, (localData) => {
         const apply = (settings) => {
+          if (epoch !== refreshEpoch) return;
           const s = settings && typeof settings === 'object' ? settings : {};
           let host = '';
           try {
@@ -262,10 +266,11 @@
           try {
             chrome.runtime.sendMessage({ type: 'GAF_TAB_PAUSE_STATE' }, (r) => {
               void chrome.runtime.lastError;
+              if (epoch !== refreshEpoch) return;
               setFilteringActive(!r?.paused);
             });
           } catch {
-            setFilteringActive(true);
+            if (epoch === refreshEpoch) setFilteringActive(true);
           }
         };
         const localSettings = localData?.gafSettings;
