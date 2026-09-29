@@ -254,7 +254,19 @@
             : false;
           // Match resolveSitePolicy: master off → inactive; deny beats exclusion
           const active = s.enabled !== false && (deny || !excluded);
-          setFilteringActive(active);
+          if (!active) {
+            setFilteringActive(false);
+            return;
+          }
+          // Paused on this tab (popup) → inactive here only.
+          try {
+            chrome.runtime.sendMessage({ type: 'GAF_TAB_PAUSE_STATE' }, (r) => {
+              void chrome.runtime.lastError;
+              setFilteringActive(!r?.paused);
+            });
+          } catch {
+            setFilteringActive(true);
+          }
         };
         const localSettings = localData?.gafSettings;
         if (localSettings && typeof localSettings === 'object' && Object.keys(localSettings).length) {
@@ -628,6 +640,13 @@ html.gaf-force-unlock [data-gaf-blocker="1"] {
   refreshEnabledFromStorage();
   try {
     chrome.storage.onChanged.addListener(() => refreshEnabledFromStorage());
+  } catch {
+    /* ignore */
+  }
+  try {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message?.type === 'GAF_TAB_PAUSE_CHANGED') refreshEnabledFromStorage();
+    });
   } catch {
     /* ignore */
   }

@@ -16,6 +16,8 @@ let lastUrl = '';
 let lastContextElement = null;
 let unstickPasses = 0;
 let unstickWatchUrl = '';
+/** Paused on this tab via the popup (answered by the service worker). */
+let tabPaused = false;
 
 const MEDIA_EVENTS = ['play', 'playing', 'timeupdate', 'loadeddata', 'canplay', 'load'];
 const DEBOUNCE_MS = 80;
@@ -42,6 +44,7 @@ function loadCore() {
       import(chrome.runtime.getURL('src/core/exclusions.mjs')),
       import(chrome.runtime.getURL('src/core/interaction-guard.mjs')),
       import(chrome.runtime.getURL('src/core/meter-reset.mjs')),
+      import(chrome.runtime.getURL('src/core/tab-pause.mjs')),
     ]).then((mods) => {
       coreModule = Object.assign({}, ...mods);
       return coreModule;
@@ -67,15 +70,28 @@ function pageUrl() {
   return globalThis.location?.href || document.location?.href || '';
 }
 
+async function queryTabPaused() {
+  try {
+    const r = await chrome.runtime.sendMessage({ type: 'GAF_TAB_PAUSE_STATE' });
+    return Boolean(r?.paused);
+  } catch {
+    return false;
+  }
+}
+
 async function refreshState() {
   const core = await loadCore();
   // Local-first — same authoritative path as popup / options / service worker
   // (Helium sync cannot always be trusted; see storage.mjs).
+  let loaded;
   try {
-    settings = await core.loadSettings();
+    loaded = await core.loadSettings();
   } catch {
-    settings = core.normalizeSettings(core.DEFAULT_SETTINGS);
+    loaded = core.normalizeSettings(core.DEFAULT_SETTINGS);
   }
+  tabPaused = await queryTabPaused();
+  // Paused tab = master off for this tab only; every policy check follows.
+  settings = core.effectiveSettingsForTab(loaded, tabPaused);
   try {
     exclusionHosts = await core.getActiveExclusionHosts();
   } catch {
@@ -658,7 +674,11 @@ chrome.storage.onChanged.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === 'GAF_SETTINGS' || message?.type === 'GAF_EXCLUSIONS_CHANGED') {
+  if (
+    message?.type === 'GAF_SETTINGS' ||
+    message?.type === 'GAF_EXCLUSIONS_CHANGED' ||
+    message?.type === 'GAF_TAB_PAUSE_CHANGED'
+  ) {
     setEnabledFromSettings()
       .then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
