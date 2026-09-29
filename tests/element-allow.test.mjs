@@ -11,6 +11,7 @@ import {
   parseAllowRules,
   normalizeAllowRules,
   pickAllowTarget,
+  allowSelectorFor,
   syncAllowMarks,
   isAllowedElement,
   MAX_ALLOW_RULES,
@@ -19,6 +20,44 @@ import { MODERATE_CSS, STRICT_CSS } from '../src/core/css-motion.mjs';
 import { normalizeSettings, buildExportPack, parseImportPack } from '../src/core/settings.mjs';
 import { freezeAnimatedImageElement, freezeVideoElement } from '../src/core/freeze-media.mjs';
 import { shouldSkipAnimation } from '../src/core/scripted-motion.mjs';
+import { cssEscapeIdent, selectorHintFor } from '../src/core/archive.mjs';
+
+test('numeric ids and classes stay valid CSS selectors', () => {
+  assert.equal(cssEscapeIdent('12345'), '\\31 2345');
+  assert.equal(cssEscapeIdent('9gif'), '\\39 gif');
+  assert.equal(cssEscapeIdent('2fast'), '\\32 fast');
+  assert.equal(cssEscapeIdent('paywall'), 'paywall');
+
+  const parent = {
+    tagName: 'DIV',
+    nodeType: 1,
+    id: '12345',
+    className: '',
+    parentElement: null,
+    children: [],
+  };
+  const img = {
+    tagName: 'IMG',
+    nodeType: 1,
+    id: '',
+    className: '2fast pic',
+    parentElement: parent,
+    children: [],
+  };
+  parent.children = [img];
+  const sel = selectorHintFor(img);
+  assert.equal(sel, 'div#\\31 2345 > img.\\32 fast.pic');
+
+  // Unescaped #12345 / .2fast throw in Chromium; the saved rule must not.
+  const doc = {
+    querySelectorAll(s) {
+      if (/#[0-9]/.test(s) || /\.[0-9]/.test(s)) throw new SyntaxError('invalid selector');
+      return [img];
+    },
+  };
+  img.ownerDocument = doc;
+  assert.equal(allowSelectorFor(img), sel);
+});
 
 test('rules round-trip through uBlock-style text', () => {
   const text = [
