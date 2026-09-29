@@ -108,7 +108,7 @@ The reverse of uBlock Origin's *Block element*: when GAF freezes something you a
 - The choice is remembered for the site and applies on every visit. The toolbar flashes **OK** when a rule is saved.
 - Right-clicking a frozen GIF works: the rule points at the real image behind GAF's still frame.
 - Manage the rules in **Options → Element hiding → Left alone**, one per line in uBlock's exception syntax, e.g. `example.com#@#figure.hero > img`. Delete a line to have GAF filter that element again.
-- Rules are CSS selectors built from the element's position and classes. Sites that rename their classes on redesigns can break a rule; add it again from the right-click menu.
+- Rules are CSS selectors built from the element's position and classes. Ids and classes are escaped like `CSS.escape`, including ones that start with a digit (`#123` is not a valid selector). Sites that rename their classes on redesigns can break a rule; add it again from the right-click menu.
 
 ## Inspection archive
 
@@ -128,7 +128,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, and keeps automatic meter resets off on a paused tab. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, keeps automatic meter resets off on a paused tab, and fixes **Leave this element alone** when the element or an ancestor has an id or class that starts with a digit. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
