@@ -133,15 +133,21 @@ export async function paintActionBadge(enabled, actionApi = globalThis.chrome?.a
   const on = isBadgeOn(enabled);
   const badge = on ? BADGE_ON : BADGE_OFF;
 
-  // Clear per-tab badge text
+  // Drop per-tab badge overrides so the global ON/OFF text and color show.
+  // text:null clears a tab override; text:'' stores a blank that hides it.
+  // Per-tab colors have no null clear in Chromium, so rewrite them to the
+  // global color here. Paused tabs are painted orange again afterwards.
   try {
     const tabs = await chrome.tabs.query({});
     await Promise.allSettled(
-      (tabs || []).map((tab) =>
-        tab.id != null
-          ? actionApi.setBadgeText({ text: '', tabId: tab.id })
-          : Promise.resolve(),
-      ),
+      (tabs || []).flatMap((tab) => {
+        if (tab.id == null) return [];
+        const jobs = [actionApi.setBadgeText({ text: null, tabId: tab.id })];
+        if (actionApi.setBadgeBackgroundColor) {
+          jobs.push(actionApi.setBadgeBackgroundColor({ color: badge.color, tabId: tab.id }));
+        }
+        return jobs;
+      }),
     );
   } catch {
     /* ignore */

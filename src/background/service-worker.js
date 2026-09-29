@@ -145,6 +145,7 @@ const { resetMeterForTab, resetMeterFromMessage } = createMeterResetter({
   chromeApi: chrome,
   loadSettings,
   getExclusionHosts: getActiveExclusionHosts,
+  isTabPaused: (tabId) => tabPause.isPaused(tabId),
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

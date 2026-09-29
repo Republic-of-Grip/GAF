@@ -85,12 +85,22 @@ export function createTabPause({ chromeApi, now = () => Date.now() }) {
         await action.setBadgeBackgroundColor?.({ color: TAB_PAUSE_BADGE.color, tabId });
         await action.setBadgeText?.({ text: TAB_PAUSE_BADGE.text, tabId });
       } else {
-        // Same per-tab reset the global repaint uses (badge.mjs paintActionBadge).
-        await action.setBadgeText?.({ text: '', tabId });
+        // Chromium stores '' as a per-tab blank, which hides the global ON/OFF.
+        // null removes the per-tab text so the global badge shows again.
+        await action.setBadgeText?.({ text: null, tabId });
+        await restoreTabBadgeColor(action, tabId);
       }
     } catch {
       /* tab closed or badge API missing */
     }
+  }
+
+  /** Copy the global badge color onto one tab. Chromium has no null clear for color. */
+  async function restoreTabBadgeColor(action, tabId) {
+    if (!action.getBadgeBackgroundColor || !action.setBadgeBackgroundColor) return;
+    const color = await action.getBadgeBackgroundColor({});
+    if (!color) return;
+    await action.setBadgeBackgroundColor({ color, tabId });
   }
 
   /** Re-apply per-tab badges after a global repaint cleared them. */

@@ -394,9 +394,13 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
 
   // Paused on this tab (popup) behaves like master off for this tab only.
   // Keep in sync with core/tab-pause.mjs effectiveSettingsForTab.
+  // Drop a stale pause reply so an older round-trip cannot turn filtering back on.
+  let tabPauseEpoch = 0;
   function withTabPause(finish) {
     return (rawSettings, localData) => {
+      const epoch = ++tabPauseEpoch;
       const done = (paused) => {
+        if (epoch !== tabPauseEpoch) return;
         const s = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
         finish(paused ? { ...s, enabled: false } : s, localData);
       };

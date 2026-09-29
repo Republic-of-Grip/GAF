@@ -673,9 +673,14 @@ function tearDownFiltering(core) {
   pushTimeFreezeConfig(core, { timeFreezeMode: 'off', timeFreezeMinMs: 2000 });
 }
 
+// Drop a stale pause reply so an older round-trip cannot turn filtering back on.
+let enableGeneration = 0;
 async function setEnabledFromSettings() {
+  const generation = ++enableGeneration;
   const core = await loadCore();
+  if (generation !== enableGeneration) return;
   await refreshState();
+  if (generation !== enableGeneration) return;
   if (!settings.enabled) {
     tearDownFiltering(core);
     return;
