@@ -51,9 +51,7 @@ html.gaf-motion-active #confirmBox,
 html.gaf-motion-active #confirmBox *,
 html.gaf-motion-active #diturelastic-filters,
 html.gaf-motion-active #diturelastic-filters *,
-html.gaf-motion-active iframe[src*="bankid.no"],
-html.gaf-motion-active iframe[src*="morrowbank.no"],
-html.gaf-motion-active iframe[src*="morrowbank.com"] {
+html.gaf-motion-active iframe {
   animation-duration: revert-layer !important;
   animation-iteration-count: revert-layer !important;
   animation-delay: revert-layer !important;
@@ -190,7 +188,7 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
 
   // Keep in sync with settings.mjs PAYMENT_AUTH_HOST_RE
   const PAYMENT_AUTH_HOST_RE =
-    /(^|\.)(bankid\.no|morrowbank\.no|morrowbank\.com)$/i;
+    /(^|\.)(stripe\.com|stripe\.network|paypal\.com|paypalobjects\.com|braintreegateway\.com|braintree-api\.com|adyen\.com|adyenpayments\.com|klarna\.com|klarnaservices\.com|checkout\.com|pay\.google\.com|vipps\.no|vippsmobilepay\.com|mobilepay\.dk|mobilepay\.fi|nets\.eu|dibspayment\.eu|dibspayment\.com|trustly\.com|mollie\.com|worldpay\.com|cardinalcommerce\.com|3dsecure\.io|signicat\.com|criipto\.id|idporten\.no|mitid\.dk|hcaptcha\.com|recaptcha\.net|challenges\.cloudflare\.com|arkoselabs\.com|funcaptcha\.com)$/i;
 
   function isMediaPlayerHost(hostname) {
     return MEDIA_PLAYER_HOST_RE.test(normalizeHost(hostname));
@@ -292,8 +290,14 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
     // YouTube / streaming: CSS motion kill breaks fullscreen (black player)
     // FilterBlade etc.: CSS motion + unstick break modals (strictness snaps back)
     const motion = s.motionLevel || 'moderate';
+    // Popup windows are verification / sign-in flows (3-D Secure, eID, OAuth).
+    const isPopup = Boolean(window.opener);
     const skipMotion =
-      motion === 'off' || isMediaPlayerHost(host) || isToolSpaHost(host) || isPaymentAuthHost(host);
+      motion === 'off' ||
+      isPopup ||
+      isMediaPlayerHost(host) ||
+      isToolSpaHost(host) ||
+      isPaymentAuthHost(host);
     ensureStyle(MOTION_ID, skipMotion ? '' : cssForLevel(motion));
 
     // Teaser loops (vg.no <preview-video>) — skip on dedicated player hosts
@@ -328,7 +332,11 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
     }
     // Games/puzzles use multi-second UX timers — never stretch (see Wordle win toast).
     const isGame = looksLikeGameOrPuzzlePath(path, host);
+    // Soft-paywall meters run in the article page itself. Frames and popups
+    // (checkout, 3-D Secure, eID, captcha) poll with multi-second timers.
     const tfEnabled =
+      window === window.top &&
+      !isPopup &&
       !isGame &&
       !isPaymentAuthHost(host) &&
       (mode === 'slow' || mode === 'stop') &&

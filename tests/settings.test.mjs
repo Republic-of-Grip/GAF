@@ -141,7 +141,7 @@ test('X.com / Twitter is a tool SPA — compose/reply mask must not be unstuck o
   assert.equal(shouldFreezeVideoOnPage('https://x.com/', s), true);
 });
 
-test('BankID / Morrow payment-auth hosts skip motion and timers, not GIF freeze', () => {
+test('verification provider hosts skip motion and timers, not GIF freeze', () => {
   const s = normalizeSettings({
     enabled: true,
     pauseScriptedMotion: true,
@@ -151,22 +151,20 @@ test('BankID / Morrow payment-auth hosts skip motion and timers, not GIF freeze'
     timeFreezeMode: 'slow',
     timeFreezeScope: 'all',
   });
-  assert.equal(isPaymentAuthHost('auth.bankid.no'), true);
-  assert.equal(isPaymentAuthHost('cs.bankid.no'), true);
-  assert.equal(isPaymentAuthHost('www.morrowbank.no'), true);
-  assert.equal(isPaymentAuthHost('secure.morrowbank.com'), true);
-  assert.equal(isPaymentAuthHost('starlink.com'), false);
+  assert.equal(isPaymentAuthHost('hooks.stripe.com'), true);
+  assert.equal(isPaymentAuthHost('login.idporten.no'), true);
+  assert.equal(isPaymentAuthHost('shop.example'), false);
   assert.equal(isPaymentAuthHost('vg.no'), false);
-  assert.equal(looksLikePaymentAuthPage('https://auth.bankid.no/auth/realms/prod'), true);
-  assert.equal(looksLikePaymentAuthPage('https://www.starlink.com/checkout'), false);
+  assert.equal(looksLikePaymentAuthPage('https://hooks.stripe.com/3d_secure_2/hosted'), true);
+  assert.equal(looksLikePaymentAuthPage('https://shop.example/checkout'), false);
   // Auth client: do not freeze motion/timers (challenge UI). Ads elsewhere still filtered.
-  assert.equal(shouldPauseScriptedMotionOnPage('https://auth.bankid.no/', s), false);
-  assert.equal(shouldApplyMotionOnPage('https://cs.bankid.no/', s), false);
-  assert.equal(shouldTimeFreezeOnPage('https://www.morrowbank.no/3ds', s), false);
-  assert.equal(shouldPauseScriptedMotionOnPage('https://www.starlink.com/checkout', s), true);
-  assert.equal(shouldApplyMotionOnPage('https://www.starlink.com/checkout', s), true);
+  assert.equal(shouldPauseScriptedMotionOnPage('https://js.stripe.com/', s), false);
+  assert.equal(shouldApplyMotionOnPage('https://checkoutshopper-live.adyen.com/', s), false);
+  assert.equal(shouldTimeFreezeOnPage('https://centinelapi.cardinalcommerce.com/', s), false);
+  assert.equal(shouldPauseScriptedMotionOnPage('https://shop.example/checkout', s), true);
+  assert.equal(shouldApplyMotionOnPage('https://shop.example/checkout', s), true);
   // Media freeze still on — this is not "turn GAF off"
-  assert.equal(shouldFreezeImagesOnPage('https://auth.bankid.no/', s), true);
+  assert.equal(shouldFreezeImagesOnPage('https://js.stripe.com/', s), true);
 });
 
 test('defaults are ON including time freeze slow and element hiding', () => {
@@ -307,4 +305,28 @@ test('export/import filter pack round-trips', () => {
   assert.equal(parsed.settings.motionLevel, 'strict');
   assert.equal(parsed.exclusions.length, 1);
   assert.equal(DEFAULT_SETTINGS.timeFreezeMode, 'slow');
+});
+
+test('checkout, 3-D Secure, eID and captcha hosts get the payment-auth skip', () => {
+  for (const h of [
+    'js.stripe.com',
+    'm.stripe.network',
+    'www.paypal.com',
+    'checkoutshopper-live.adyen.com',
+    'js.klarna.com',
+    'api.vipps.no',
+    'centinelapi.cardinalcommerce.com',
+    'login.idporten.no',
+    'newassets.hcaptcha.com',
+    'challenges.cloudflare.com',
+    'pay.google.com',
+  ]) {
+    assert.equal(isPaymentAuthHost(h), true, h);
+  }
+  for (const h of ['google.com', 'cloudflare.com', 'notstripe.com', 'stripe.com.example.net', 'nytimes.com']) {
+    assert.equal(isPaymentAuthHost(h), false, h);
+  }
+  const s = normalizeSettings({ enabled: true, timeFreezeMode: 'slow', timeFreezeScope: 'all' });
+  assert.equal(shouldTimeFreezeOnPage('https://challenges.cloudflare.com/turnstile/', s), false);
+  assert.equal(shouldApplyMotionOnPage('https://js.stripe.com/v3/', s), false);
 });

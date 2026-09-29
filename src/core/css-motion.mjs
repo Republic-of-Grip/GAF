@@ -60,9 +60,7 @@ html.gaf-motion-active #confirmBox,
 html.gaf-motion-active #confirmBox *,
 html.gaf-motion-active #diturelastic-filters,
 html.gaf-motion-active #diturelastic-filters *,
-html.gaf-motion-active iframe[src*="bankid.no"],
-html.gaf-motion-active iframe[src*="morrowbank.no"],
-html.gaf-motion-active iframe[src*="morrowbank.com"] {
+html.gaf-motion-active iframe {
   animation-duration: revert-layer !important;
   animation-iteration-count: revert-layer !important;
   animation-delay: revert-layer !important;

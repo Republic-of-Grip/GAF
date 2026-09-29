@@ -18,10 +18,11 @@
  *     Never infer consent from selected categories or seed a consent cookie.
  *  3) Orphan dimmer with no usable non-consent dialog → hide + unlock.
  *  4) Login / cart / filter / age-gate panels → leave alone.
- *  5) BankID / Morrow payment-auth windows → leave alone (not a cookie grey).
- *     GAF has no window.open interceptor. The false block is hiding the
- *     3DS overlay: a full-viewport scrim around a cross-origin BankID
- *     iframe has no readable text, so it looks like an empty dimmer.
+ *  5) Checkout / 3-D Secure / eID / captcha windows → leave alone (not a
+ *     cookie grey). A full-viewport scrim around a cross-origin iframe has
+ *     no readable text, so it looks like an empty dimmer; any layer hosting
+ *     a visible iframe, and any page with a password / one-time-code /
+ *     card field, is left alone.
  */
 
 /** Selectors that commonly host full-screen interaction blockers. */
@@ -152,18 +153,17 @@ export function isMarketingChromeLayer(el) {
 }
 
 /**
- * BankID / Morrow 3DS hosts. Keep in sync with settings.mjs PAYMENT_AUTH_HOST_RE.
- * Not a general popup allowlist — only first-party payment-auth windows.
+ * Checkout / 3-D Secure / eID / captcha provider hosts.
+ * Keep in sync with settings.mjs PAYMENT_AUTH_HOST_RE (tests/host-list-sync).
  */
 export const PAYMENT_AUTH_HOST_RE =
-  /(^|\.)(bankid\.no|morrowbank\.no|morrowbank\.com)$/i;
+  /(^|\.)(stripe\.com|stripe\.network|paypal\.com|paypalobjects\.com|braintreegateway\.com|braintree-api\.com|adyen\.com|adyenpayments\.com|klarna\.com|klarnaservices\.com|checkout\.com|pay\.google\.com|vipps\.no|vippsmobilepay\.com|mobilepay\.dk|mobilepay\.fi|nets\.eu|dibspayment\.eu|dibspayment\.com|trustly\.com|mollie\.com|worldpay\.com|cardinalcommerce\.com|3dsecure\.io|signicat\.com|criipto\.id|idporten\.no|mitid\.dk|hcaptcha\.com|recaptcha\.net|challenges\.cloudflare\.com|arkoselabs\.com|funcaptcha\.com)$/i;
 
 /**
- * Copy that only belongs on the national-ID / BankID challenge, not cookie walls.
- * "fødselsnummer" is the Starlink/Morrow step; "BankID" is the client itself.
+ * Copy that belongs on a card / identity verification step, not on cookie walls.
  */
 export const PAYMENT_AUTH_TEXT_RE =
-  /bankid|morrow\s*bank|f[øo]dselsnummer|nasjonalt\s+identitetsnummer/i;
+  /3-?d[\s-]?secure|verified by visa|mastercard (?:id|identity) check|safekey|verify your identity|confirm your identity/i;
 
 function paymentAuthHostName(hostname) {
   const h = String(hostname || '')
@@ -173,7 +173,10 @@ function paymentAuthHostName(hostname) {
   return Boolean(h && PAYMENT_AUTH_HOST_RE.test(h));
 }
 
-/** True if an iframe/window URL is BankID or Morrow payment-auth. */
+/** Ids / classes providers use for 3-D Secure and verification containers. */
+export const AUTH_ID_CLASS_RE = /three-?d-?s|3-?d-?secure|\b3ds\b|acs[-_]?challenge|payment-?auth/i;
+
+/** True if an iframe/window URL is a known checkout / verification provider. */
 export function isPaymentAuthSrc(src) {
   if (!src || typeof src !== 'string') return false;
   const s = src.trim();
@@ -186,7 +189,7 @@ export function isPaymentAuthSrc(src) {
   } catch {
     /* fall through */
   }
-  return /(?:^|[/.])(bankid\.no|morrowbank\.no|morrowbank\.com)(?:[/?#:]|$)/i.test(s);
+  return false;
 }
 
 function iframeLooksLikePaymentAuth(frame) {
@@ -196,11 +199,11 @@ function iframeLooksLikePaymentAuth(frame) {
   const id = String(frame.id || frame.getAttribute?.('id') || '');
   const name = frame.getAttribute?.('name') || '';
   const title = frame.getAttribute?.('title') || '';
-  return /bankid|morrowbank/i.test(id) || PAYMENT_AUTH_TEXT_RE.test(`${name} ${title}`);
+  return AUTH_ID_CLASS_RE.test(id) || PAYMENT_AUTH_TEXT_RE.test(`${name} ${title}`);
 }
 
 /**
- * True if this node is (or hosts) a BankID / Morrow payment-auth window.
+ * True if this node is (or hosts) a checkout / verification window.
  * Cross-origin iframes have empty innerText — host/src is the signal.
  */
 export function isPaymentAuthLayer(el) {
@@ -209,7 +212,7 @@ export function isPaymentAuthLayer(el) {
   if (tag === 'IFRAME' && iframeLooksLikePaymentAuth(el)) return true;
   const id = String(el.id || '');
   const cls = typeof el.className === 'string' ? el.className : '';
-  if (/bankid|morrowbank/i.test(id) || /bankid|morrowbank/i.test(cls)) return true;
+  if (AUTH_ID_CLASS_RE.test(id) || AUTH_ID_CLASS_RE.test(cls)) return true;
   try {
     const frames = el.querySelectorAll?.('iframe');
     if (frames) {
@@ -224,7 +227,7 @@ export function isPaymentAuthLayer(el) {
   return PAYMENT_AUTH_TEXT_RE.test(text);
 }
 
-/** True if the document currently hosts BankID / Morrow auth (iframe or challenge copy). */
+/** True if the document currently hosts a verification frame or challenge copy. */
 export function documentHasPaymentAuth(doc) {
   if (!doc) return false;
   try {
@@ -256,6 +259,68 @@ export function documentHasPaymentAuth(doc) {
   return false;
 }
 
+/** Fields that only appear on sign-in, one-time-code and card-entry steps. */
+export const CREDENTIAL_FIELD_SELECTOR = [
+  'input[type="password"]',
+  'input[autocomplete="one-time-code"]',
+  'input[autocomplete^="cc-"]',
+  'input[autocomplete*="webauthn"]',
+].join(', ');
+
+/** True if the page shows a password / one-time-code / card field. */
+export function documentHasCredentialField(doc) {
+  try {
+    return Boolean(doc?.querySelector?.(CREDENTIAL_FIELD_SELECTOR));
+  } catch {
+    return false;
+  }
+}
+
+/** Text-entry fields (not consent checkboxes/toggles). Cookie panels have none. */
+const TEXT_ENTRY_SELECTOR =
+  'input:not([type]), input[type="text"], input[type="tel"], input[type="number"], input[type="email"], input[type="password"], textarea';
+
+/**
+ * True if this layer hosts a visible embedded frame (or is one).
+ *
+ * Cross-origin iframes always read as empty (no innerText, no buttons), so a
+ * scrim around a Stripe / Adyen / Klarna / bank 3-D Secure challenge, an eID
+ * login or a captcha looks exactly like an orphan dimmer. GAF cannot see what
+ * is inside, so it must not hide it. Tiny (tracking) or hidden frames do not
+ * count; frames that cannot be measured are assumed visible.
+ */
+export function hostsEmbeddedFrame(el, view = globalThis) {
+  if (!el || el.nodeType !== 1) return false;
+  const tag = String(el.tagName || '').toUpperCase();
+  let frames = [];
+  if (tag === 'IFRAME' || tag === 'FRAME' || tag === 'EMBED' || tag === 'OBJECT') {
+    frames = [el];
+  } else {
+    try {
+      frames = Array.from(el.querySelectorAll?.('iframe, frame, embed, object') || []);
+    } catch {
+      return false;
+    }
+  }
+  if (!frames.length) return false;
+  const win = view?.defaultView || view;
+  const getStyle = view?.getComputedStyle || win?.getComputedStyle?.bind(win);
+  for (const f of frames) {
+    try {
+      if (typeof getStyle === 'function') {
+        const st = getStyle(f);
+        if (st && (st.display === 'none' || st.visibility === 'hidden')) continue;
+      }
+      const r = f.getBoundingClientRect?.();
+      if (!r) return true;
+      if (r.width >= 48 && r.height >= 48) return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * True if body classes/styles look scroll-locked (Hyvä noscroll etc.).
  */
@@ -282,8 +347,11 @@ export function isBlockingDimmer(el, view = globalThis) {
   const getStyle = view.getComputedStyle || win?.getComputedStyle?.bind(win);
   if (el.getAttribute?.('data-gaf-unstuck') === '1') return false;
   if (isMarketingChromeLayer(el)) return false;
-  // BankID / Morrow 3DS overlay: cross-origin iframe reads as an empty scrim.
+  // Known verification provider / 3-D Secure container.
   if (isPaymentAuthLayer(el)) return false;
+  // Any scrim around an embedded frame (3-D Secure, eID, captcha, checkout):
+  // its content is unreadable, so "empty" is not evidence of an orphan.
+  if (hostsEmbeddedFrame(el, view)) return false;
   if (typeof getStyle !== 'function') {
     return el.dataset?.gafTestDimmer === '1';
   }
@@ -467,7 +535,7 @@ function panelText(el) {
  */
 export function hasUsableModalContent(doc, view = globalThis) {
   if (!doc?.querySelectorAll) return false;
-  // BankID iframe is usable chrome even when parent text is empty (cross-origin).
+  // A verification iframe is usable chrome even when parent text is empty (cross-origin).
   if (documentHasPaymentAuth(doc)) return true;
   const win = view.defaultView || view;
   const getStyle = view.getComputedStyle || win?.getComputedStyle?.bind(win);
@@ -500,6 +568,13 @@ export function isConsentLikePanel(el) {
   // Payment-auth copy often includes personvern links; that is not a cookie wall.
   if (isPaymentAuthLayer(el)) return false;
   if (el.id === 'cookie-popup' || el.id === 'ditur-popup-content') return true;
+  // Identity / card / sign-in panels ask for typed input; cookie panels never do,
+  // even when they link a privacy policy.
+  try {
+    if (el.querySelector?.(TEXT_ENTRY_SELECTOR)) return false;
+  } catch {
+    /* ignore */
+  }
   const text = panelText(el);
   if (text.length < 8) return false;
   // Cookie-specific copy is required. A lone "I agree" / "Accept all" button is
@@ -856,49 +931,6 @@ export function hideBlockingDimmers(doc, view, seen = new Set(), { hideConsentCh
   return cleared;
 }
 
-/** Named adapter host for Hyvä cookie_consent seeding. */
-export function isDiturConsentHost(hostname) {
-  const h = String(hostname || '')
-    .toLowerCase()
-    .replace(/^www\./, '');
-  return h === 'ditur.no' || h.endsWith('.ditur.no');
-}
-
-/**
- * Seed a minimal cookie_consent cookie so Hyvä/ditur shouldDisplay() stays closed.
- * Matches the shape createConsentObject() writes (necessary only).
- * Only runs on ditur.no — not a global fallback.
- */
-export function seedMinimalConsentCookie(doc, view = globalThis) {
-  const win = view.defaultView || view || globalThis;
-  const host = win.location?.hostname || '';
-  if (!isDiturConsentHost(host)) return false;
-  try {
-    const payload = {
-      timestamp: new Date().toISOString(),
-      consent_domain: win.location?.hostname || 'www.ditur.no',
-      cookie_consent_id: 'gaf' + Math.random().toString(36).slice(2, 12),
-      consents_approved: ['cookie_cat_necessary'],
-      consents_denied: [
-        'cookie_cat_unclassified',
-        'cookie_cat_functional',
-        'cookie_cat_statistic',
-        'cookie_cat_marketing',
-      ],
-    };
-    const value = encodeURIComponent(JSON.stringify(payload));
-    const maxAge = 14 * 24 * 60 * 60;
-    const host = win.location?.hostname || '';
-    doc.cookie = `cookie_consent=${value}; path=/; max-age=${maxAge}; samesite=lax`;
-    if (host) {
-      doc.cookie = `cookie_consent=${value}; path=/; max-age=${maxAge}; samesite=lax; domain=${host}`;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Explicit force still cannot make an ambiguous consent decision. */
 export function forceUncoverInteractionLock(doc, view = globalThis) {
   const consent = dismissBlockingConsentWall(doc, view);
@@ -924,10 +956,15 @@ export function unstickOrphanedOverlays(doc, view = globalThis, options = {}) {
   const result = { cleared: 0, unlocked: false, reason: 'noop' };
   if (!doc?.querySelectorAll) return result;
 
-  // Payment-auth first: never click-accept or hide BankID/Morrow even if the
-  // challenge mentions personvern or sits in an empty-looking iframe overlay.
+  // Payment-auth first: never click-accept or hide a verification step even if
+  // it mentions privacy or sits in an empty-looking iframe overlay.
   if (documentHasPaymentAuth(doc)) {
     result.reason = 'payment-auth-present';
+    return result;
+  }
+  // Login / one-time-code / card entry is never a cookie wall.
+  if (documentHasCredentialField(doc)) {
+    result.reason = 'credential-field-present';
     return result;
   }
 
@@ -961,7 +998,13 @@ export function unstickOrphanedOverlays(doc, view = globalThis, options = {}) {
     return result;
   }
 
-  // 3) Orphan dimmers with no usable dialog
+  // 3) Orphan dimmers with no usable dialog. Top frame only: a dimmer inside
+  // an iframe cannot lock the page, and payment / eID / captcha providers
+  // render their whole UI inside frames.
+  if (options.topFrame === false) {
+    result.reason = 'subframe-skip-orphan';
+    return result;
+  }
   result.cleared = hideBlockingDimmers(doc, view, new Set());
   result.unlocked = unlockBodyScroll(doc);
   result.reason = result.cleared > 0 || result.unlocked ? 'cleared' : 'none-found';

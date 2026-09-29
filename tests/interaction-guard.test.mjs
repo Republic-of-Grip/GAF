@@ -18,11 +18,11 @@ import {
   clickConsentControl,
   requestMainWorldClick,
   documentHasCookieEvidence,
-  isDiturConsentHost,
-  seedMinimalConsentCookie,
   isPaymentAuthSrc,
   isPaymentAuthLayer,
   documentHasPaymentAuth,
+  hostsEmbeddedFrame,
+  documentHasCredentialField,
 } from '../src/core/interaction-guard.mjs';
 
 test('cssColorAlpha parses rgba and modern slash syntax', () => {
@@ -250,7 +250,7 @@ test('unstick leaves page alone when usable non-consent modal is present', () =>
   assert.notEqual(dimmer.style.display, 'none');
 });
 
-function fakeBankIdIframe(src = 'https://auth.bankid.no/auth/realms/prod/protocol/openid-connect/auth') {
+function fakeProviderIframe(src = 'https://hooks.stripe.com/3d_secure_2/hosted') {
   return {
     nodeType: 1,
     tagName: 'IFRAME',
@@ -267,8 +267,8 @@ function fakeBankIdIframe(src = 'https://auth.bankid.no/auth/realms/prod/protoco
   };
 }
 
-function fakeStarlinkBankIdOverlay() {
-  const iframe = fakeBankIdIframe();
+function fakeCheckoutAuthOverlay() {
+  const iframe = fakeProviderIframe();
   const overlay = {
     nodeType: 1,
     tagName: 'DIV',
@@ -331,18 +331,16 @@ function fakeStarlinkBankIdOverlay() {
   return { doc, overlay, iframe, body };
 }
 
-test('isPaymentAuthSrc matches BankID and Morrow, not checkout or ads', () => {
-  assert.equal(isPaymentAuthSrc('https://auth.bankid.no/auth/realms/prod'), true);
-  assert.equal(isPaymentAuthSrc('https://cs.bankid.no/client'), true);
-  assert.equal(isPaymentAuthSrc('https://secure.morrowbank.no/acs/challenge'), true);
-  assert.equal(isPaymentAuthSrc('https://www.morrowbank.com/3ds'), true);
-  assert.equal(isPaymentAuthSrc('https://www.starlink.com/checkout'), false);
+test('isPaymentAuthSrc matches verification providers, not shops or ads', () => {
+  assert.equal(isPaymentAuthSrc('https://hooks.stripe.com/3d_secure_2/hosted'), true);
+  assert.equal(isPaymentAuthSrc('https://login.idporten.no/authorize'), true);
+  assert.equal(isPaymentAuthSrc('https://shop.example/checkout'), false);
   assert.equal(isPaymentAuthSrc('https://doubleclick.net/ad'), false);
   assert.equal(isPaymentAuthSrc('about:blank'), false);
 });
 
-test('BankID iframe overlay is not an orphan dimmer (Starlink/Morrow 3DS)', () => {
-  const { overlay } = fakeStarlinkBankIdOverlay();
+test('provider 3-D Secure iframe overlay is not an orphan dimmer', () => {
+  const { overlay } = fakeCheckoutAuthOverlay();
   const view = {
     innerWidth: 1200,
     innerHeight: 800,
@@ -363,8 +361,8 @@ test('BankID iframe overlay is not an orphan dimmer (Starlink/Morrow 3DS)', () =
   assert.equal(isBlockingDimmer(overlay, view), false);
 });
 
-test('unstick leaves BankID/Morrow payment-auth overlay alone', () => {
-  const { doc, overlay, body } = fakeStarlinkBankIdOverlay();
+test('unstick leaves a provider verification overlay alone', () => {
+  const { doc, overlay, body } = fakeCheckoutAuthOverlay();
   assert.equal(documentHasPaymentAuth(doc), true);
   const result = unstickOrphanedOverlays(doc, {});
   assert.equal(result.reason, 'payment-auth-present');
@@ -373,22 +371,60 @@ test('unstick leaves BankID/Morrow payment-auth overlay alone', () => {
   assert.equal(body.classList.contains('overflow-hidden'), true);
 });
 
-test('payment-auth copy is not a cookie wall even with personvern', () => {
+test('3-D Secure copy is not a cookie wall even with a privacy link', () => {
+  const text = 'Verify your identity to complete this 3-D Secure payment. Read our privacy policy.';
   const panel = {
     nodeType: 1,
     tagName: 'DIV',
-    id: 'acs-challenge',
+    id: 'challenge',
     className: '',
-    innerText:
-      'Skriv inn fødselsnummer for å fortsette med BankID. Les vår personvernpolicy.',
-    textContent:
-      'Skriv inn fødselsnummer for å fortsette med BankID. Les vår personvernpolicy.',
+    innerText: text,
+    textContent: text,
+    querySelector() {
+      return null;
+    },
     querySelectorAll() {
       return [];
     },
   };
   assert.equal(isPaymentAuthLayer(panel), true);
   assert.equal(isConsentLikePanel(panel), false);
+});
+
+test('a panel that asks for typed input is never a cookie wall', () => {
+  // e.g. national ID / phone / one-time-code step that links a privacy policy
+  const text = 'Enter your ID number to continue. Personvern and cookie policy.';
+  const input = { nodeType: 1, tagName: 'INPUT' };
+  const panel = {
+    nodeType: 1,
+    tagName: 'DIV',
+    id: '',
+    className: '',
+    innerText: text,
+    textContent: text,
+    querySelector(sel) {
+      return /input/.test(sel) ? input : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+  };
+  assert.equal(isPaymentAuthLayer(panel), false);
+  assert.equal(isConsentLikePanel(panel), false);
+});
+
+test('pages with a password / one-time-code / card field are left alone', () => {
+  const { doc, dimmer } = fakeDocWithOrphanDimmer();
+  doc.querySelector = (sel) => (/one-time-code/.test(sel) ? { nodeType: 1 } : null);
+  assert.equal(documentHasCredentialField(doc), true);
+  const result = unstickOrphanedOverlays(doc, {});
+  assert.equal(result.reason, 'credential-field-present');
+  assert.notEqual(dimmer.style.display, 'none');
+});
+
+test('3-D Secure container ids/classes mark a verification layer', () => {
+  const el = { nodeType: 1, tagName: 'DIV', id: '', className: 'stripe-3ds-challenge', innerText: '', querySelectorAll: () => [] };
+  assert.equal(isPaymentAuthLayer(el), true);
 });
 
 test('orphan ad dimmer is still hidden when no payment-auth is present', () => {
@@ -990,16 +1026,6 @@ test('dismissBlockingConsentWall does not click I agree on an age gate', () => {
   assert.deepEqual(clicked.labels, []);
 });
 
-test('ditur cookie seeding is host-gated', () => {
-  assert.equal(isDiturConsentHost('www.ditur.no'), true);
-  assert.equal(isDiturConsentHost('example.com'), false);
-  const doc = { cookie: '' };
-  assert.equal(seedMinimalConsentCookie(doc, { location: { hostname: 'example.com' } }), false);
-  assert.equal(doc.cookie, '');
-  assert.equal(seedMinimalConsentCookie(doc, { location: { hostname: 'www.ditur.no' } }), true);
-  assert.match(doc.cookie, /cookie_consent=/);
-});
-
 test('unstickOrphanedOverlays consent-dismissed reason on ditur-style wall', () => {
   const { doc, greyDimmer, clicked } = fakeDiturConsentWall('Kun nødvendige');
   const result = unstickOrphanedOverlays(doc, {});
@@ -1098,4 +1124,146 @@ test('selected consent is not assumed minimal; keep the wall and choices intact'
   assert.equal(body.classList.contains('noscroll'), true);
   assert.notEqual(greyDimmer.style.display, 'none');
   assert.equal(doc.cookie, before);
+});
+
+// --- Generic checkout / 3-D Secure / captcha overlays -----------------------
+
+function fakeFrame(src, rect = { width: 500, height: 600 }) {
+  return {
+    nodeType: 1,
+    tagName: 'IFRAME',
+    id: '',
+    className: '',
+    src,
+    innerText: '',
+    textContent: '',
+    getAttribute(name) {
+      if (name === 'src') return src;
+      return name === 'id' || name === 'name' || name === 'title' ? '' : null;
+    },
+    getBoundingClientRect() {
+      return rect;
+    },
+  };
+}
+
+/** Full-viewport scrim (no text, no buttons) wrapping one iframe; body scroll-locked. */
+function fakeFrameOverlay(frame, backgroundColor = 'rgba(0, 0, 0, 0.4)') {
+  const overlay = {
+    nodeType: 1,
+    tagName: 'DIV',
+    id: '',
+    className: '',
+    dataset: {},
+    style: {
+      display: '',
+      setProperty(k, v) {
+        this[k] = v;
+      },
+    },
+    getAttribute(name) {
+      if (name === 'data-gaf-unstuck') return this.dataset.gafUnstuck || null;
+      return null;
+    },
+    setAttribute(name, val) {
+      if (name === 'data-gaf-unstuck') this.dataset.gafUnstuck = val;
+    },
+    getBoundingClientRect() {
+      return { width: 1200, height: 800 };
+    },
+    querySelector(sel) {
+      return /iframe/.test(String(sel)) ? frame : null;
+    },
+    querySelectorAll(sel) {
+      return /iframe/.test(String(sel)) ? [frame] : [];
+    },
+    innerText: '',
+    textContent: '',
+  };
+  const body = {
+    classList: {
+      _set: new Set(['noscroll']),
+      contains(c) {
+        return this._set.has(c);
+      },
+      remove(c) {
+        this._set.delete(c);
+      },
+    },
+    style: { overflow: 'hidden' },
+    children: [overlay],
+  };
+  overlay.ownerDocument = { body, querySelector: () => null };
+  const doc = {
+    body,
+    documentElement: { style: {}, classList: { contains: () => false } },
+    querySelectorAll(sel) {
+      if (sel === 'iframe') return [frame];
+      return [];
+    },
+  };
+  const view = {
+    innerWidth: 1200,
+    innerHeight: 800,
+    getComputedStyle() {
+      return {
+        display: 'block',
+        visibility: 'visible',
+        pointerEvents: 'auto',
+        opacity: '1',
+        position: 'fixed',
+        backgroundColor,
+        backdropFilter: 'none',
+        webkitBackdropFilter: 'none',
+      };
+    },
+  };
+  return { overlay, body, doc, view };
+}
+
+test('isPaymentAuthSrc covers common processors, 3DS, eID and captcha hosts', () => {
+  assert.equal(isPaymentAuthSrc('https://js.stripe.com/v3/three-ds-2-challenge.html'), true);
+  assert.equal(isPaymentAuthSrc('https://hooks.stripe.com/3d_secure_2/hosted'), true);
+  assert.equal(isPaymentAuthSrc('https://checkoutshopper-live.adyen.com/checkoutshopper/'), true);
+  assert.equal(isPaymentAuthSrc('https://js.klarna.com/eu/kp/'), true);
+  assert.equal(isPaymentAuthSrc('https://centinelapi.cardinalcommerce.com/V1/Cruise'), true);
+  assert.equal(isPaymentAuthSrc('https://newassets.hcaptcha.com/captcha/v1/'), true);
+  assert.equal(isPaymentAuthSrc('https://challenges.cloudflare.com/cdn-cgi/challenge-platform/'), true);
+  // Look-alikes must not match
+  assert.equal(isPaymentAuthSrc('https://stripe.com.example.net/'), false);
+  assert.equal(isPaymentAuthSrc('https://notstripe.com/'), false);
+  assert.equal(isPaymentAuthSrc('https://doubleclick.net/ad'), false);
+});
+
+test('scrim around an unknown issuer 3-D Secure iframe is not an orphan dimmer', () => {
+  // Issuer ACS domains are endless; the frame itself is the signal.
+  const frame = fakeFrame('https://acs.some-issuer.example/challenge');
+  const { overlay, view } = fakeFrameOverlay(frame);
+  assert.equal(isPaymentAuthLayer(overlay), false);
+  assert.equal(hostsEmbeddedFrame(overlay, view), true);
+  assert.equal(isBlockingDimmer(overlay, view), false);
+});
+
+test('transparent click-catcher wrapping a checkout iframe survives a locked body', () => {
+  const frame = fakeFrame('https://pay.some-shop.example/iframe');
+  const { overlay, body, doc, view } = fakeFrameOverlay(frame, 'rgba(0, 0, 0, 0)');
+  const result = unstickOrphanedOverlays(doc, view);
+  assert.equal(result.cleared, 0);
+  assert.notEqual(overlay.style.display, 'none');
+  assert.equal(body.classList.contains('noscroll'), false, 'scroll unlock alone is harmless');
+});
+
+test('tiny or hidden tracking frames do not shield a real orphan dimmer', () => {
+  const pixel = fakeFrame('https://tracker.example/p', { width: 1, height: 1 });
+  const { overlay, view } = fakeFrameOverlay(pixel);
+  assert.equal(hostsEmbeddedFrame(overlay, view), false);
+  assert.equal(isBlockingDimmer(overlay, view), true);
+});
+
+test('subframes never hide orphan dimmers (provider UIs live in frames)', () => {
+  const { doc, dimmer } = fakeDocWithOrphanDimmer();
+  const result = unstickOrphanedOverlays(doc, {}, { topFrame: false });
+  assert.equal(result.reason, 'subframe-skip-orphan');
+  assert.equal(result.cleared, 0);
+  assert.notEqual(dimmer.style.display, 'none');
 });

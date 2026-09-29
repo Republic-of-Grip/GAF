@@ -50,6 +50,19 @@ function loadCore() {
   return corePromise;
 }
 
+/**
+ * Popup windows are verification / sign-in flows (3-D Secure, eID, OAuth):
+ * their spinners, polling timers and overlays are the UI. Keep in sync with
+ * early.js / unstick-early.js.
+ */
+function isPopupWindow() {
+  try {
+    return Boolean(window.opener);
+  } catch {
+    return false;
+  }
+}
+
 function pageUrl() {
   return globalThis.location?.href || document.location?.href || '';
 }
@@ -78,7 +91,9 @@ async function refreshState() {
 
 function pushTimeFreezeConfig(core, s, pageHref) {
   const url = pageHref || pageUrl();
-  const enabled = core.shouldTimeFreezeOnPage(url, s, exclusionHosts);
+  // Soft-paywall meters run in the article page; frames and popups do not get stretch.
+  const enabled =
+    window === window.top && !isPopupWindow() && core.shouldTimeFreezeOnPage(url, s, exclusionHosts);
   const cfg = core.timeFreezeMainConfig(s, { enabled });
   try {
     window.postMessage({ source: 'gaf-extension', ...cfg }, '*');
@@ -124,7 +139,7 @@ async function applyAll() {
 
   pushTimeFreezeConfig(core, s, url);
 
-  if (core.shouldApplyMotionOnPage(url, s, exclusionHosts)) {
+  if (!isPopupWindow() && core.shouldApplyMotionOnPage(url, s, exclusionHosts)) {
     core.applyMotionStyle(document, s.motionLevel);
   } else {
     core.removeMotionStyle(document);
@@ -161,7 +176,7 @@ async function applyAll() {
     core.restoreFrozenMedia(document, { types: ['image'] });
   }
 
-  if (core.shouldPauseScriptedMotionOnPage(url, s, exclusionHosts)) {
+  if (!isPopupWindow() && core.shouldPauseScriptedMotionOnPage(url, s, exclusionHosts)) {
     // Warmup: let Alpine/Hyvä modal enter transitions finish before pausing SMIL/WAAPI
     if (performance.now() > SCRIPTED_WARMUP_MS) {
       core.pauseAllScriptedMotion(document);
@@ -338,14 +353,18 @@ async function runUnstick(opts = {}) {
   const site = core.resolveSitePolicy(url, s, exclusionHosts);
   if (!site.active) return { cleared: 0, unlocked: false, reason: 'inactive' };
   // Tool SPAs / players: unstick hides legitimate modals (Grok settings, FilterBlade, YT).
-  // BankID / Morrow: 3DS overlay looks like an empty cookie grey (cross-origin iframe).
-  if (core.looksLikePaymentAuthPage(url)) {
+  // Verification providers and popup windows (3-D Secure, eID, OAuth): their
+  // overlays look like empty cookie greys (cross-origin iframe).
+  if (core.looksLikePaymentAuthPage(url) || isPopupWindow()) {
     return { cleared: 0, unlocked: false, reason: 'skipped-payment-auth' };
   }
   if (core.looksLikeToolSpaPage(url) || core.looksLikePlayerPage(url)) {
     return { cleared: 0, unlocked: false, reason: 'skipped-tool-spa' };
   }
-  return core.unstickOrphanedOverlays(document, globalThis, opts);
+  return core.unstickOrphanedOverlays(document, globalThis, {
+    ...opts,
+    topFrame: window === window.top,
+  });
 }
 
 function scheduleSnapshotIfNeeded(core, s, url) {
@@ -527,7 +546,7 @@ function startScriptedLoop() {
   scriptedTimer = setInterval(() => {
     if (performance.now() < SCRIPTED_WARMUP_MS) return;
     loadCore().then((core) => {
-      if (settings && core.shouldPauseScriptedMotionOnPage(pageUrl(), settings, exclusionHosts)) {
+      if (settings && !isPopupWindow() && core.shouldPauseScriptedMotionOnPage(pageUrl(), settings, exclusionHosts)) {
         core.pauseAllScriptedMotion(document);
       }
     });
@@ -665,7 +684,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     loadCore().then((core) => {
       core.removeReadingSnapshot(document);
       // Uncover: dismiss locking cookie walls, hard-uncover if needed
-      const unstick = core.unstickOrphanedOverlays(document, globalThis, { force: true });
+      const unstick = core.unstickOrphanedOverlays(document, globalThis, {
+        force: true,
+        topFrame: window === window.top,
+      });
       sendResponse({ ok: true, unstick });
     });
     return true;

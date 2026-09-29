@@ -22,6 +22,10 @@
   // Keep aligned with interaction-guard.mjs; never infer what "selected" means.
   const MINIMAL_RE =
     /^(?:necessary only|only necessary|kun n[øo]dvendige?|bare n[øo]dvendige?|avvis alle|reject all|decline all|deny all|refuse all)(?: cookies| informasjonskapsler)?[.!]?$/i;
+  // Detection only (a consent panel is present); never clicked. Mirrors
+  // interaction-guard.mjs CONSENT_FULL_BTN_RE.
+  const FULL_RE =
+    /godta alle|accept all|allow all|aksepter alle|jeg godtar|i agree|allow cookies|accept cookies|godta$/i;
   // No bare "privacy" — matches app settings text (Grok etc.) and false-unsticks modals
   const CONSENT_RE =
     /cookie|cookies|personvern|consent|samtykke|vi tilpasser|privacy policy|cookie policy|informasjonskapsler|we use cookies|vi bruker cookies/i;
@@ -44,14 +48,19 @@
     /(^|\.)(filterblade\.xyz|pathofexile\.com|maxroll\.gg|poe\.ninja|poewiki\.net|overgear\.com|x\.ai|grok\.com|x\.com|twitter\.com)$/i;
 
   /**
-   * BankID / Morrow 3DS — never unstick. Keep in sync with settings.mjs PAYMENT_AUTH_HOST_RE.
-   * Regression: Starlink + Morrow card, national-ID/BankID popup hidden as an orphan grey.
+   * Checkout / 3-D Secure / eID / captcha providers — never unstick.
+   * Keep in sync with settings.mjs PAYMENT_AUTH_HOST_RE (tests/host-list-sync).
    */
   const PAYMENT_AUTH_HOST_RE =
-    /(^|\.)(bankid\.no|morrowbank\.no|morrowbank\.com)$/i;
+    /(^|\.)(stripe\.com|stripe\.network|paypal\.com|paypalobjects\.com|braintreegateway\.com|braintree-api\.com|adyen\.com|adyenpayments\.com|klarna\.com|klarnaservices\.com|checkout\.com|pay\.google\.com|vipps\.no|vippsmobilepay\.com|mobilepay\.dk|mobilepay\.fi|nets\.eu|dibspayment\.eu|dibspayment\.com|trustly\.com|mollie\.com|worldpay\.com|cardinalcommerce\.com|3dsecure\.io|signicat\.com|criipto\.id|idporten\.no|mitid\.dk|hcaptcha\.com|recaptcha\.net|challenges\.cloudflare\.com|arkoselabs\.com|funcaptcha\.com)$/i;
 
   const PAYMENT_AUTH_TEXT_RE =
-    /bankid|morrow\s*bank|f[øo]dselsnummer|nasjonalt\s+identitetsnummer/i;
+    /3-?d[\s-]?secure|verified by visa|mastercard (?:id|identity) check|safekey|verify your identity|confirm your identity/i;
+
+  // Keep in sync with interaction-guard.mjs AUTH_ID_CLASS_RE / CREDENTIAL_FIELD_SELECTOR
+  const AUTH_ID_CLASS_RE = /three-?d-?s|3-?d-?secure|\b3ds\b|acs[-_]?challenge|payment-?auth/i;
+  const CREDENTIAL_FIELD_SELECTOR =
+    'input[type="password"], input[autocomplete="one-time-code"], input[autocomplete^="cc-"], input[autocomplete*="webauthn"]';
 
   function hostNorm() {
     return String(location.hostname || '')
@@ -90,7 +99,7 @@
     } catch {
       /* ignore */
     }
-    return /(?:^|[/.])(bankid\.no|morrowbank\.no|morrowbank\.com)(?:[/?#:]|$)/i.test(s);
+    return false;
   }
 
   function isPaymentAuthLayer(el) {
@@ -98,7 +107,7 @@
     if (el.tagName === 'IFRAME' && paymentAuthSrc(el.getAttribute('src') || el.src)) return true;
     const id = el.id || '';
     const cls = typeof el.className === 'string' ? el.className : '';
-    if (/bankid|morrowbank/i.test(id) || /bankid|morrowbank/i.test(cls)) return true;
+    if (AUTH_ID_CLASS_RE.test(id) || AUTH_ID_CLASS_RE.test(cls)) return true;
     try {
       const frames = el.querySelectorAll?.('iframe');
       if (frames) {
@@ -111,6 +120,26 @@
     }
     const text = (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
     return PAYMENT_AUTH_TEXT_RE.test(text);
+  }
+
+  function hostsVisibleFrame(el) {
+    let frames;
+    try {
+      frames = el.querySelectorAll('iframe, frame, embed, object');
+    } catch {
+      return false;
+    }
+    for (const f of frames) {
+      try {
+        const st = getComputedStyle(f);
+        if (st.display === 'none' || st.visibility === 'hidden') continue;
+        const r = f.getBoundingClientRect();
+        if (r.width >= 48 && r.height >= 48) return true;
+      } catch {
+        return true;
+      }
+    }
+    return false;
   }
 
   function isFullscreenMedia() {
@@ -131,6 +160,13 @@
     if (isMediaPlayerSite()) return true;
     if (isToolSpaSite()) return true;
     if (isPaymentAuthSite()) return true;
+    // Popup windows (3-D Secure, eID, OAuth) and sign-in / card steps are never cookie walls.
+    if (window.opener) return true;
+    try {
+      if (document.querySelector(CREDENTIAL_FIELD_SELECTOR)) return true;
+    } catch {
+      /* ignore */
+    }
     if (isFullscreenMedia()) return true;
     return false;
   }
@@ -313,8 +349,15 @@ html.gaf-force-unlock [data-gaf-blocker="1"] {
     if (document.querySelector('#cookie-popup, #ditur-popup-content, #ditur-popup-container')) {
       return true;
     }
-    const text = (document.body?.innerText || '').slice(0, 4000);
-    if (CONSENT_RE.test(text) && (MINIMAL_RE.test(text) || FULL_RE.test(text))) return true;
+    const roots = document.querySelectorAll('[role="dialog"], [aria-modal="true"]');
+    for (const root of roots) {
+      if (isPaymentAuthLayer(root)) continue;
+      if (!CONSENT_RE.test((root.innerText || '').slice(0, 4000))) continue;
+      for (const btn of root.querySelectorAll('button, [role="button"], a.button, input[type="button"], input[type="submit"]')) {
+        const t = (btn.innerText || btn.textContent || btn.value || '').replace(/\s+/g, ' ').trim();
+        if (t && t.length <= 80 && (MINIMAL_RE.test(t) || FULL_RE.test(t))) return true;
+      }
+    }
     return false;
   }
 
@@ -422,6 +465,9 @@ html.gaf-force-unlock [data-gaf-blocker="1"] {
       if (isMediaElement(el)) continue;
       if (isAppModal(el)) continue;
       if (isPaymentAuthLayer(el)) continue;
+      // Cross-origin frames read as empty; a scrim around one may be a 3-D Secure,
+      // eID or captcha window. Keep in sync with interaction-guard hostsEmbeddedFrame.
+      if (hostsVisibleFrame(el)) continue;
       const tag = el.tagName;
       if (tag === 'MAIN' || tag === 'ARTICLE' || tag === 'HEADER' || tag === 'NAV') continue;
       const earlyId = el.id || '';

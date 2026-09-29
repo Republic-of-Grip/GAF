@@ -549,20 +549,20 @@ export function looksLikeToolSpaPage(pageUrl) {
 }
 
 /**
- * First-party payment-auth windows (BankID / Morrow 3DS).
+ * Well-known checkout / 3-D Secure / eID / captcha providers, whose frames
+ * rely on timers and animation for the verification UI itself.
  *
- * GAF does not intercept window.open. The false block is interaction-guard
- * treating the BankID/Morrow overlay (or the popup document itself) as an
- * orphan cookie dimmer — a full-viewport scrim whose cross-origin iframe
- * has no readable text, so it looks empty. Helium 2026-09-08: Starlink
- * checkout, Morrow Bank card, Norwegian national ID + BankID step never
- * appeared until GAF was turned off.
- *
- * Narrow host allow only. Ads and unrelated popups stay filtered.
+ * GAF does not intercept window.open. The historic false block was the
+ * interaction guard treating a verification overlay as an orphan cookie
+ * dimmer: a full-viewport scrim whose cross-origin iframe has no readable
+ * text, so it looks empty. Issuer and eID domains are too many to list;
+ * interaction-guard hostsEmbeddedFrame covers those structurally, and popup
+ * windows (window.opener) are skipped by the content scripts.
+ * Host allow only (exact domain or subdomain). Ads and unrelated popups stay filtered.
  * Keep in sync with early.js, unstick-early.js, and interaction-guard.mjs.
  */
 export const PAYMENT_AUTH_HOST_RE =
-  /(^|\.)(bankid\.no|morrowbank\.no|morrowbank\.com)$/i;
+  /(^|\.)(stripe\.com|stripe\.network|paypal\.com|paypalobjects\.com|braintreegateway\.com|braintree-api\.com|adyen\.com|adyenpayments\.com|klarna\.com|klarnaservices\.com|checkout\.com|pay\.google\.com|vipps\.no|vippsmobilepay\.com|mobilepay\.dk|mobilepay\.fi|nets\.eu|dibspayment\.eu|dibspayment\.com|trustly\.com|mollie\.com|worldpay\.com|cardinalcommerce\.com|3dsecure\.io|signicat\.com|criipto\.id|idporten\.no|mitid\.dk|hcaptcha\.com|recaptcha\.net|challenges\.cloudflare\.com|arkoselabs\.com|funcaptcha\.com)$/i;
 
 export function isPaymentAuthHost(hostname) {
   const h = normalizeHost(hostname);
@@ -585,7 +585,7 @@ export function shouldPauseScriptedMotionOnPage(pageUrl, settings, exclusionHost
   if (looksLikePlayerPage(pageUrl)) return false;
   // FilterBlade etc. use animations/timers for UI state — pausing snaps controls back
   if (looksLikeToolSpaPage(pageUrl)) return false;
-  // BankID / Morrow 3DS client: animation + timers are the auth UI, not decoration
+  // Checkout / 3-D Secure / captcha frames: animation + timers are the UI, not decoration
   if (looksLikePaymentAuthPage(pageUrl)) return false;
   return resolveSitePolicy(pageUrl, s, exclusionHosts).active;
 }
@@ -614,7 +614,7 @@ export function shouldTimeFreezeOnPage(pageUrl, settings, exclusionHosts = []) {
   if (looksLikeGameOrPuzzlePage(pageUrl)) return false;
   // FilterBlade-like tools: long timers drive UI; stretching reverts selections
   if (looksLikeToolSpaPage(pageUrl)) return false;
-  // BankID / Morrow: stretching auth-step timers stalls the challenge window
+  // Checkout / 3-D Secure / captcha: stretching auth-step timers stalls the challenge
   if (looksLikePaymentAuthPage(pageUrl)) return false;
 
   // Default: only soft-paywall hosts — avoids breaking lazy-load on local papers (e.g. av-avis.no)
