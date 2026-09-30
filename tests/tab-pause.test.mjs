@@ -102,7 +102,21 @@ test('global badge repaint restores the paused-tab marker', async () => {
   );
   chromeApi.badges.length = 0;
   await pause.paintTabBadge(4, false);
-  assert.deepEqual(chromeApi.badges, [['text', '', 4]]);
+  assert.deepEqual(chromeApi.badges, [['text', null, 4]]);
+});
+
+test('resume drops the per-tab badge so the global ON/OFF color shows', async () => {
+  const chromeApi = fakeChrome();
+  const globalColor = [22, 130, 70, 255];
+  chromeApi.action.getBadgeBackgroundColor = async () => globalColor;
+  const pause = createTabPause({ chromeApi });
+  await pause.setPaused(4, true);
+  chromeApi.badges.length = 0;
+  await pause.paintTabBadge(4, false);
+  assert.deepEqual(chromeApi.badges, [
+    ['text', null, 4],
+    ['color', globalColor, 4],
+  ]);
 });
 
 test('a paused tab resolves as inactive through the normal policy checks', () => {
@@ -117,11 +131,17 @@ test('a paused tab resolves as inactive through the normal policy checks', () =>
   assert.equal(s.enabled, true);
 });
 
-test('every content script honours the tab pause', () => {
-  for (const f of ['src/content/early.js', 'src/content/unstick-early.js', 'src/content/main.js']) {
+test('every content script honours the tab pause and drops a stale reply', () => {
+  const epochs = {
+    'src/content/early.js': /tabPauseEpoch/,
+    'src/content/unstick-early.js': /refreshEpoch/,
+    'src/content/main.js': /enableGeneration/,
+  };
+  for (const [f, epoch] of Object.entries(epochs)) {
     const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
     assert.match(src, /GAF_TAB_PAUSE_STATE/, `${f} asks for pause state`);
     assert.match(src, /GAF_TAB_PAUSE_CHANGED/, `${f} reacts to pause changes`);
+    assert.match(src, epoch, `${f} ignores an older pause reply`);
   }
 });
 
@@ -162,4 +182,5 @@ test('service worker delegates pause messages and clears pauses on tab close', (
   assert.match(src, /handleTabPauseMessage\(message, _sender/);
   assert.match(src, /onRemoved\.addListener\(\(tabId\) => \{[\s\S]*?tabPause\.forgetTab\(tabId\)/);
   assert.match(src, /repaintPausedBadges\(\)/);
+  assert.match(src, /isTabPaused: \(tabId\) => tabPause\.isPaused\(tabId\)/);
 });
