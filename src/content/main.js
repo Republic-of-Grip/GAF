@@ -18,6 +18,13 @@ let unstickPasses = 0;
 let unstickWatchUrl = '';
 /** Paused on this tab via the popup (answered by the service worker). */
 let tabPaused = false;
+// Publish epoch for overlapping reads. Only the newest refreshState may assign
+// the shared settings below. settledEnableGeneration is the newest read that
+// has finished; committedEnableSnapshot is the last one that published.
+let enableGeneration = 0;
+let settledEnableGeneration = 0;
+let committedEnableSnapshot = null;
+let enableCommitWaiters = [];
 
 const MEDIA_EVENTS = ['play', 'playing', 'timeupdate', 'loadeddata', 'canplay', 'load'];
 const DEBOUNCE_MS = 80;
@@ -80,40 +87,69 @@ async function queryTabPaused() {
   }
 }
 
+function resolveEnableCommitWaiters() {
+  const waiters = enableCommitWaiters;
+  enableCommitWaiters = [];
+  for (const resolve of waiters) resolve();
+}
+
+function waitForEnableCommit() {
+  return new Promise((resolve) => {
+    enableCommitWaiters.push(resolve);
+  });
+}
+
 async function refreshState() {
   // Later reads bump this. An older pause reply must not publish after them.
   const generation = ++enableGeneration;
-  const core = await loadCore();
-  // Local-first — same authoritative path as popup / options / service worker
-  // (Helium sync cannot always be trusted; see storage.mjs).
-  let loaded;
   try {
-    loaded = await core.loadSettings();
-  } catch {
-    loaded = core.normalizeSettings(core.DEFAULT_SETTINGS);
-  }
-  const paused = await queryTabPaused();
-  let hosts;
-  try {
-    hosts = await core.getActiveExclusionHosts();
-  } catch {
+    const core = await loadCore();
+    // Local-first — same authoritative path as popup / options / service worker
+    // (Helium sync cannot always be trusted; see storage.mjs).
+    let loaded;
     try {
-      const local = await chrome.storage.local.get({ gafExclusions: [] });
-      hosts = core.activeExclusionHosts(local.gafExclusions || []);
+      loaded = await core.loadSettings();
     } catch {
-      hosts = [];
+      loaded = core.normalizeSettings(core.DEFAULT_SETTINGS);
     }
+    const paused = await queryTabPaused();
+    let hosts;
+    try {
+      hosts = await core.getActiveExclusionHosts();
+    } catch {
+      try {
+        const local = await chrome.storage.local.get({ gafExclusions: [] });
+        hosts = core.activeExclusionHosts(local.gafExclusions || []);
+      } catch {
+        hosts = [];
+      }
+    }
+    // Locals only until this point. No await between the check and the assign,
+    // so a stale GAF_TAB_PAUSE_STATE reply cannot overwrite shared settings.
+    if (generation !== enableGeneration) {
+      return { committed: false, generation, settings, tabPaused, exclusionHosts };
+    }
+    tabPaused = paused;
+    // Paused tab = master off for this tab only; every policy check follows.
+    settings = core.effectiveSettingsForTab(loaded, paused);
+    exclusionHosts = hosts;
+    committedEnableSnapshot = {
+      generation,
+      settings,
+      tabPaused,
+      exclusionHosts: Array.isArray(hosts) ? hosts.slice() : [],
+    };
+    settledEnableGeneration = generation;
+    resolveEnableCommitWaiters();
+    return { committed: true, generation, settings, tabPaused, exclusionHosts };
+  } catch (err) {
+    // A failed latest read must still wake the decision waiting to sync the observer.
+    if (generation === enableGeneration) {
+      settledEnableGeneration = generation;
+      resolveEnableCommitWaiters();
+    }
+    throw err;
   }
-  // Locals only until this point. No await between the check and the assign,
-  // so a stale GAF_TAB_PAUSE_STATE reply cannot overwrite shared settings.
-  if (generation !== enableGeneration) {
-    return { committed: false, generation, settings, tabPaused, exclusionHosts };
-  }
-  tabPaused = paused;
-  // Paused tab = master off for this tab only; every policy check follows.
-  settings = core.effectiveSettingsForTab(loaded, paused);
-  exclusionHosts = hosts;
-  return { committed: true, generation, settings, tabPaused, exclusionHosts };
 }
 
 async function stateForPolicy() {
@@ -704,9 +740,8 @@ function tearDownFiltering(core) {
   pushTimeFreezeConfig(core, { timeFreezeMode: 'off', timeFreezeMinMs: 2000 });
 }
 
-// Publish epoch for overlapping pause reads. Apply epoch is separate so a meter
-// re-read cannot cancel the delayed passes scheduled by the latest enable.
-let enableGeneration = 0;
+// Apply epoch is separate from the publish epoch so a meter re-read cannot
+// cancel the delayed passes scheduled by the latest enable decision.
 let applyGeneration = 0;
 const applyFollowUpTimers = new Set();
 
@@ -724,38 +759,58 @@ function scheduleApplyFollowUp(committed, delay) {
   applyFollowUpTimers.add(timer);
 }
 
+function observerShouldRun(core, committed) {
+  if (!committed.settings?.enabled) return false;
+  const site = core.resolveSitePolicy(pageUrl(), committed.settings, committed.exclusionHosts);
+  return Boolean(site.active);
+}
+
 async function setEnabledFromSettings() {
   // A new decision replaces follow-up applies queued by the previous one.
   cancelApplyFollowUps();
   const applyToken = ++applyGeneration;
   const core = await loadCore();
-  const refreshed = await refreshState();
+  await refreshState();
+  // A newer pause/resume owns the observer. A history apply or meter re-read
+  // does not: those bump the publish epoch and would otherwise make this return
+  // before startObserver / tearDownFiltering.
   if (applyToken !== applyGeneration) return;
-  if (!refreshed.committed || refreshed.generation !== enableGeneration) return;
-  const committed = {
-    applyGeneration: applyToken,
-    settings: refreshed.settings,
-    exclusionHosts: Array.isArray(refreshed.exclusionHosts) ? refreshed.exclusionHosts.slice() : [],
-  };
-  if (!committed.settings?.enabled) {
-    tearDownFiltering(core);
+
+  while (applyToken === applyGeneration) {
+    const generation = enableGeneration;
+    const snap = committedEnableSnapshot;
+    const stable = settledEnableGeneration === generation && snap?.settings;
+    if (!stable) {
+      if (settledEnableGeneration === generation) return;
+      await waitForEnableCommit();
+      continue;
+    }
+    // No await between this re-check and start/stop. A read that starts later
+    // is reconciled after the next await.
+    if (enableGeneration !== generation) continue;
+    const committed = {
+      applyGeneration: applyToken,
+      settings: snap.settings,
+      exclusionHosts: Array.isArray(snap.exclusionHosts) ? snap.exclusionHosts.slice() : [],
+    };
+    if (!observerShouldRun(core, committed)) {
+      tearDownFiltering(core);
+      if (enableGeneration !== generation || settledEnableGeneration !== generation) continue;
+      return;
+    }
+    try {
+      globalThis.__gafUnstickSetActive?.(true);
+    } catch {
+      /* ignore */
+    }
+    startObserver();
+    await applyAll(committed);
+    if (applyToken !== applyGeneration) return;
+    if (enableGeneration !== generation || settledEnableGeneration !== generation) continue;
+    scheduleApplyFollowUp(committed, 750);
+    scheduleApplyFollowUp(committed, 2000);
     return;
   }
-  const site = core.resolveSitePolicy(pageUrl(), committed.settings, committed.exclusionHosts);
-  if (!site.active) {
-    tearDownFiltering(core);
-    return;
-  }
-  try {
-    globalThis.__gafUnstickSetActive?.(true);
-  } catch {
-    /* ignore */
-  }
-  startObserver();
-  await applyAll(committed);
-  if (applyToken !== applyGeneration) return;
-  scheduleApplyFollowUp(committed, 750);
-  scheduleApplyFollowUp(committed, 2000);
 }
 
 async function archiveLastContextElement() {

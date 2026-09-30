@@ -83,7 +83,7 @@ For a one-off step that GAF gets in the way of — a checkout, a bank or 3-D Sec
 - The pause survives navigation inside the tab, so a checkout that redirects to your bank and back stays paused.
 - It ends when you click **Resume on this tab**, close the tab, or restart the browser. Nothing is saved to settings.
 - The toolbar shows an orange **II** badge on a paused tab. Resume clears it, so that tab shows the usual ON/OFF badge again.
-- If a pause and a resume overlap, the later choice wins. A slower reply cannot turn filtering back on or off.
+- If a pause and a resume overlap, the later choice wins. A slower reply cannot turn filtering back on or off. A history change during startup, or a meter re-read that overlaps that choice, cannot leave filtering running or stopped against it.
 - As with turning GAF off, reload the page if you need stretched timers or already-replaced page components fully restored.
 
 ## Exclusion backlog
@@ -129,7 +129,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, keeps automatic meter resets off on a paused tab, ignores an older pause reply when a newer pause or resume is already in flight, and fixes **Leave this element alone** when the element or an ancestor has an id or class that starts with a digit. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, keeps automatic meter resets off on a paused tab, ignores an older pause reply when a newer pause or resume is already in flight (including when a history change or meter re-read overlaps that choice), and fixes **Leave this element alone** when the element or an ancestor has an id or class that starts with a digit. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
