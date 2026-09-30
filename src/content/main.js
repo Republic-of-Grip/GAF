@@ -81,6 +81,8 @@ async function queryTabPaused() {
 }
 
 async function refreshState() {
+  // Later reads bump this. An older pause reply must not publish after them.
+  const generation = ++enableGeneration;
   const core = await loadCore();
   // Local-first — same authoritative path as popup / options / service worker
   // (Helium sync cannot always be trusted; see storage.mjs).
@@ -90,27 +92,41 @@ async function refreshState() {
   } catch {
     loaded = core.normalizeSettings(core.DEFAULT_SETTINGS);
   }
-  tabPaused = await queryTabPaused();
-  // Paused tab = master off for this tab only; every policy check follows.
-  settings = core.effectiveSettingsForTab(loaded, tabPaused);
+  const paused = await queryTabPaused();
+  let hosts;
   try {
-    exclusionHosts = await core.getActiveExclusionHosts();
+    hosts = await core.getActiveExclusionHosts();
   } catch {
     try {
       const local = await chrome.storage.local.get({ gafExclusions: [] });
-      exclusionHosts = core.activeExclusionHosts(local.gafExclusions || []);
+      hosts = core.activeExclusionHosts(local.gafExclusions || []);
     } catch {
-      exclusionHosts = [];
+      hosts = [];
     }
   }
-  return settings;
+  // Locals only until this point. No await between the check and the assign,
+  // so a stale GAF_TAB_PAUSE_STATE reply cannot overwrite shared settings.
+  if (generation !== enableGeneration) {
+    return { committed: false, generation, settings, tabPaused, exclusionHosts };
+  }
+  tabPaused = paused;
+  // Paused tab = master off for this tab only; every policy check follows.
+  settings = core.effectiveSettingsForTab(loaded, paused);
+  exclusionHosts = hosts;
+  return { committed: true, generation, settings, tabPaused, exclusionHosts };
 }
 
-function pushTimeFreezeConfig(core, s, pageHref) {
+async function stateForPolicy() {
+  if (settings) return { settings, exclusionHosts };
+  const refreshed = await refreshState();
+  return { settings: refreshed.settings, exclusionHosts: refreshed.exclusionHosts };
+}
+
+function pushTimeFreezeConfig(core, s, pageHref, hosts = exclusionHosts) {
   const url = pageHref || pageUrl();
   // Soft-paywall meters run in the article page; frames and popups do not get stretch.
   const enabled =
-    window === window.top && !isPopupWindow() && core.shouldTimeFreezeOnPage(url, s, exclusionHosts);
+    window === window.top && !isPopupWindow() && core.shouldTimeFreezeOnPage(url, s, hosts);
   const cfg = core.timeFreezeMainConfig(s, { enabled });
   try {
     window.postMessage({ source: 'gaf-extension', ...cfg }, '*');
@@ -120,9 +136,20 @@ function pushTimeFreezeConfig(core, s, pageHref) {
   }
 }
 
-async function applyAll() {
+async function applyAll(committed) {
   const core = await loadCore();
-  const s = settings || (await refreshState());
+  // A follow-up from an older enable must not run after a newer pause/resume.
+  if (committed && committed.applyGeneration !== applyGeneration) return { active: false };
+  let s = committed?.settings;
+  let hosts = committed?.exclusionHosts;
+  if (!s) {
+    const fresh = await stateForPolicy();
+    if (committed && committed.applyGeneration !== applyGeneration) return { active: false };
+    s = fresh.settings;
+    hosts = hosts || fresh.exclusionHosts;
+  }
+  if (!s) return { active: false };
+  if (!hosts) hosts = exclusionHosts;
   const url = pageUrl();
   if (url !== lastUrl) {
     unstickPasses = 0;
@@ -130,7 +157,7 @@ async function applyAll() {
   }
   lastUrl = url;
 
-  const site = core.resolveSitePolicy(url, s, exclusionHosts);
+  const site = core.resolveSitePolicy(url, s, hosts);
 
   if (!site.active) {
     stopUnstickWatch();
@@ -148,37 +175,37 @@ async function applyAll() {
     } catch {
       /* ignore */
     }
-    pushTimeFreezeConfig(core, { timeFreezeMode: 'off', timeFreezeMinMs: 2000 }, url);
+    pushTimeFreezeConfig(core, { timeFreezeMode: 'off', timeFreezeMinMs: 2000 }, url, hosts);
     stopScriptedLoop();
     clearTimeout(snapshotTimer);
     return { active: false };
   }
 
-  pushTimeFreezeConfig(core, s, url);
+  pushTimeFreezeConfig(core, s, url, hosts);
 
   // "Leave this element alone" rules: mark before any freeze pass runs.
   applyAllowRules(core, s);
 
-  if (!isPopupWindow() && core.shouldApplyMotionOnPage(url, s, exclusionHosts)) {
+  if (!isPopupWindow() && core.shouldApplyMotionOnPage(url, s, hosts)) {
     core.applyMotionStyle(document, s.motionLevel);
   } else {
     core.removeMotionStyle(document);
   }
 
-  if (core.shouldElementHideOnPage(url, s, exclusionHosts)) {
+  if (core.shouldElementHideOnPage(url, s, hosts)) {
     core.applyHideStyle(document, core.effectiveHideRules(s));
   } else {
     core.removeHideStyle(document);
   }
 
-  if (core.shouldCustomCssOnPage(url, s, exclusionHosts)) {
+  if (core.shouldCustomCssOnPage(url, s, hosts)) {
     core.applySiteCss(document, core.cssForHost(s.siteCss, site.host));
   } else {
     core.removeSiteCss(document);
   }
 
-  const freezeImages = core.shouldFreezeImagesOnPage(url, s, exclusionHosts);
-  const freezeVideos = core.shouldFreezeVideoOnPage(url, s, exclusionHosts);
+  const freezeImages = core.shouldFreezeImagesOnPage(url, s, hosts);
+  const freezeVideos = core.shouldFreezeVideoOnPage(url, s, hosts);
 
   const result = core.freezeMediaIn(document, {
     freezeImages,
@@ -196,7 +223,7 @@ async function applyAll() {
     core.restoreFrozenMedia(document, { types: ['image'] });
   }
 
-  if (!isPopupWindow() && core.shouldPauseScriptedMotionOnPage(url, s, exclusionHosts)) {
+  if (!isPopupWindow() && core.shouldPauseScriptedMotionOnPage(url, s, hosts)) {
     // Warmup: let Alpine/Hyvä modal enter transitions finish before pausing SMIL/WAAPI
     if (performance.now() > SCRIPTED_WARMUP_MS) {
       core.pauseAllScriptedMotion(document);
@@ -208,7 +235,7 @@ async function applyAll() {
   }
 
   // Snapshot only when time freeze is actually active on this page
-  if (core.shouldTimeFreezeOnPage(url, s, exclusionHosts)) {
+  if (core.shouldTimeFreezeOnPage(url, s, hosts)) {
     scheduleSnapshotIfNeeded(core, s, url);
   } else {
     clearTimeout(snapshotTimer);
@@ -219,7 +246,7 @@ async function applyAll() {
 
   scheduleUnstickPasses();
   // Meter handling: always disarm when enabled; cookie wipe auto when mode=auto
-  scheduleMeterHandling(core, s, url);
+  scheduleMeterHandling(core, s, url, hosts);
 
   // Keep toolbar badge honest while filtering (clears stuck per-tab OFF)
   try {
@@ -278,10 +305,10 @@ function maybeDisarmMeter(core, s, url) {
 }
 
 /** Scheduled actions always consult current settings; the worker owns wipe retries. */
-function scheduleMeterHandling(core, s, url) {
+function scheduleMeterHandling(core, s, url, hosts = exclusionHosts) {
   if (window !== window.top) return;
-  if (!core.shouldDisarmMeterOnPage(url, s, exclusionHosts) &&
-      !core.shouldAutoMeterReset(url, s, exclusionHosts)) {
+  if (!core.shouldDisarmMeterOnPage(url, s, hosts) &&
+      !core.shouldAutoMeterReset(url, s, hosts)) {
     cancelMeterHandling();
     core.restoreMeterWall(document);
     return;
@@ -368,9 +395,11 @@ function startUnstickWatch() {
 
 async function runUnstick(opts = {}) {
   const core = await loadCore();
-  const s = settings || (await refreshState());
+  const fresh = await stateForPolicy();
+  const s = fresh.settings;
+  const hosts = fresh.exclusionHosts;
   const url = pageUrl();
-  const site = core.resolveSitePolicy(url, s, exclusionHosts);
+  const site = core.resolveSitePolicy(url, s, hosts);
   if (!site.active) return { cleared: 0, unlocked: false, reason: 'inactive' };
   // Tool SPAs / players: unstick hides legitimate modals (Grok settings, FilterBlade, YT).
   // Verification providers and popup windows (3-D Secure, eID, OAuth): their
@@ -426,9 +455,10 @@ function scheduleApply(delay = DEBOUNCE_MS) {
 
 async function onVideoEvent(video) {
   const core = await loadCore();
-  const s = settings || (await refreshState());
+  const fresh = await stateForPolicy();
+  const s = fresh.settings;
   const url = pageUrl();
-  if (!core.shouldFreezeVideoOnPage(url, s, exclusionHosts)) {
+  if (!core.shouldFreezeVideoOnPage(url, s, fresh.exclusionHosts)) {
     core.restoreFrozenMedia([video], { types: ['video'] });
     return;
   }
@@ -648,6 +678,7 @@ function hookHistory() {
 }
 
 function tearDownFiltering(core) {
+  cancelApplyFollowUps();
   cancelMeterHandling();
   core.restoreMeterWall(document);
   core.restoreScriptedMotion(document);
@@ -673,19 +704,44 @@ function tearDownFiltering(core) {
   pushTimeFreezeConfig(core, { timeFreezeMode: 'off', timeFreezeMinMs: 2000 });
 }
 
-// Drop a stale pause reply so an older round-trip cannot turn filtering back on.
+// Publish epoch for overlapping pause reads. Apply epoch is separate so a meter
+// re-read cannot cancel the delayed passes scheduled by the latest enable.
 let enableGeneration = 0;
+let applyGeneration = 0;
+const applyFollowUpTimers = new Set();
+
+function cancelApplyFollowUps() {
+  for (const timer of applyFollowUpTimers) clearTimeout(timer);
+  applyFollowUpTimers.clear();
+}
+
+function scheduleApplyFollowUp(committed, delay) {
+  const timer = setTimeout(() => {
+    applyFollowUpTimers.delete(timer);
+    if (!committed || committed.applyGeneration !== applyGeneration) return;
+    applyAll(committed).catch(() => {});
+  }, delay);
+  applyFollowUpTimers.add(timer);
+}
+
 async function setEnabledFromSettings() {
-  const generation = ++enableGeneration;
+  // A new decision replaces follow-up applies queued by the previous one.
+  cancelApplyFollowUps();
+  const applyToken = ++applyGeneration;
   const core = await loadCore();
-  if (generation !== enableGeneration) return;
-  await refreshState();
-  if (generation !== enableGeneration) return;
-  if (!settings.enabled) {
+  const refreshed = await refreshState();
+  if (applyToken !== applyGeneration) return;
+  if (!refreshed.committed || refreshed.generation !== enableGeneration) return;
+  const committed = {
+    applyGeneration: applyToken,
+    settings: refreshed.settings,
+    exclusionHosts: Array.isArray(refreshed.exclusionHosts) ? refreshed.exclusionHosts.slice() : [],
+  };
+  if (!committed.settings?.enabled) {
     tearDownFiltering(core);
     return;
   }
-  const site = core.resolveSitePolicy(pageUrl(), settings, exclusionHosts);
+  const site = core.resolveSitePolicy(pageUrl(), committed.settings, committed.exclusionHosts);
   if (!site.active) {
     tearDownFiltering(core);
     return;
@@ -696,9 +752,10 @@ async function setEnabledFromSettings() {
     /* ignore */
   }
   startObserver();
-  await applyAll();
-  setTimeout(() => applyAll().catch(() => {}), 750);
-  setTimeout(() => applyAll().catch(() => {}), 2000);
+  await applyAll(committed);
+  if (applyToken !== applyGeneration) return;
+  scheduleApplyFollowUp(committed, 750);
+  scheduleApplyFollowUp(committed, 2000);
 }
 
 async function archiveLastContextElement() {
