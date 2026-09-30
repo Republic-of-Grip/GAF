@@ -90,7 +90,15 @@ function harness() {
   };
   const sandbox = {
     console,
-    CustomEvent,
+    // Node 18 has no global CustomEvent. The page script only constructs one
+    // and passes it to a no-op dispatchEvent; the race assertions below still
+    // depend on observer start/stop, not on the event object.
+    CustomEvent: class CustomEvent {
+      constructor(type, init) {
+        this.type = type;
+        this.detail = init && init.detail;
+      }
+    },
     MutationObserver: class MutationObserver {
       observe() {}
       disconnect() {}
