@@ -64,6 +64,7 @@ export const METER_RESET_MODES = ['off', 'manual', 'auto'];
 export const METER_RESET_SCOPES = ['softwall', 'all'];
 
 export const VIDEO_POLICIES = ['off', 'news', 'heuristic'];
+export const VIDEO_PLAY_ON = ['click', 'hover', 'any'];
 export const MOTION_LEVELS = ['off', 'moderate', 'strict'];
 
 /**
@@ -135,6 +136,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   freezeImages: true,
   /** Broader default — exclude sites that break. */
   videoPolicy: 'heuristic',
+  /**
+   * When videos may start: 'click' (default — only after you click / press
+   * play), 'hover' (also when the pointer rests on them), 'any' (site decides).
+   * Enforced in the page by src/content/video-start-main.js.
+   */
+  videoPlayOn: 'click',
 
   newsHosts: [],
   useDefaultNewsHosts: true,
@@ -286,6 +293,9 @@ export function normalizeSettings(raw) {
   base.meterResetClearDurableStorage = Boolean(base.meterResetClearDurableStorage);
   base.meterDisarm = base.meterDisarm !== false;
 
+  if (!VIDEO_PLAY_ON.includes(base.videoPlayOn)) {
+    base.videoPlayOn = DEFAULT_SETTINGS.videoPlayOn;
+  }
   if (!VIDEO_POLICIES.includes(base.videoPolicy)) {
     base.videoPolicy = DEFAULT_SETTINGS.videoPolicy;
   }

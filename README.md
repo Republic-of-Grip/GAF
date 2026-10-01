@@ -6,12 +6,13 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.34)
+## Features (v0.2.35)
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
 | Freeze GIFs | On | Canvas still frames (skips lazy-load spacers) |
 | Video autoplay policy | **Heuristic** | Broader muted/loop/autoplay freeze; full-bleed heroes stay visible (paused, sources kept). A player’s play control can start that clip (Mixkit and similar) |
+| **Videos start on** | **Click** | Videos start only when you click them or their play button (or with *Hover or click*, when the pointer rests on them). Stops feeds such as X starting videos as you scroll |
 | CSS motion | Moderate | Early inject at `document_start` |
 | Scripted motion pause | On | Infinite WAAPI / SVG / Lottie loops only |
 | **Time freeze** | **Slow** (soft-wall hosts) | Stretches long page timers for soft paywalls |
@@ -26,6 +27,16 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 | Import / export | — | Filter pack JSON |
 
 Muted autoplay still starts paused, including a stock-video page such as Mixkit. The play control on that player (a button beside the video, or a click on the video) starts the clip and GAF leaves it playing. Hover-preview grids stay frozen. Full-bleed heroes stay visible and paused, with their sources kept.
+
+### Videos start on: Click / Hover or click / Site decides
+
+Feeds such as X start videos from their own script as each post scrolls into view; the videos carry no `autoplay` attribute, so the autoplay policy above never saw them. **Videos start on** stops that at the source: a page's request to start a video is refused exactly the way the browser's own autoplay block refuses it, and the site shows its normal play button.
+
+- **Click** (default): a video plays when you click it, its play overlay or a play / pause button that belongs to it, or focus the video (or its play button) and press Space / Enter / K. Clicking other buttons on top of a video — Like, mute, a shop link — does not start it, and neither does a touch-scroll that begins on it. Once you started a video it may keep playing (buffering, scrolling back), and a viewer that opens right after your click (X's media viewer) plays too.
+- **Hover or click**: also plays a video when the pointer rests on it for about half a second without scrolling; moving the pointer away pauses it again. Scrolling past videos does not start them.
+- **Site decides**: no extra blocking.
+
+Not applied on dedicated video sites (YouTube, Vimeo, Twitch, Netflix and the like) or pages that are one specific video (`/watch`, `/embed/…`, `/video/<id>` such as X's single-video view — listing pages like `/videos` or a profile's media tab keep the guard), to live camera / video-call streams, to audio, in popup windows or payment / eID pages, when the site is excluded or the tab is paused, or when *Video autoplay policy* is Off. *Leave this element alone* rules also let a video play, including restarting one whose autoplay GAF held back. Choose the mode in the popup or in Options → Video.
 
 ## Soft paywalls (“slow / stop time”)
 
@@ -129,7 +140,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, keeps automatic meter resets off on a paused tab, ignores an older pause reply when a newer pause or resume is already in flight (including when a history change or meter re-read overlaps that choice), and fixes **Leave this element alone** when the element or an ancestor has an id or class that starts with a digit. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.35** adds **Videos start on: Click** (default) / **Hover or click** / **Site decides** — feeds like X no longer start videos as you scroll. **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, keeps automatic meter resets off on a paused tab, ignores an older pause reply when a newer pause or resume is already in flight (including when a history change or meter re-read overlaps that choice), and fixes **Leave this element alone** when the element or an ancestor has an id or class that starts with a digit. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
@@ -176,6 +187,7 @@ gaf/
     background/service-worker.js
     content/
       time-freeze-main.js   # MAIN world timer stretch
+      video-start-main.js   # MAIN world: videos start on click / hover
       early.js              # document_start CSS / hide / config
       main.js               # media, snapshot, archive hook
     core/

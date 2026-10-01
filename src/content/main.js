@@ -582,7 +582,36 @@ function releaseAllowed(core) {
       }
     }
   }
+  // Autoplay the video-start guard held back (it was never frozen, so the
+  // restore above does not cover it): give it back and start it.
+  for (const video of document.querySelectorAll('video[data-gaf-autoplay-held]')) {
+    if (!core.isAllowedElement(video)) continue;
+    try {
+      delete video.dataset.gafAutoplayHeld;
+      video.autoplay = true;
+      if (video.paused) video.play?.()?.catch?.(() => {});
+    } catch {
+      /* autoplay policy */
+    }
+  }
   core.resumeAllowedScriptedMotion(document);
+}
+
+/**
+ * The video-start guard (MAIN world) hover-started a video. If GAF froze it
+ * (sources stripped), restore it here so it can actually play.
+ */
+function userPlayRequestHandler(event) {
+  const video = event.target;
+  if (!video || video.tagName !== 'VIDEO') return;
+  loadCore()
+    .then((core) => {
+      if (video.dataset?.gafFrozen === 'video') {
+        core.allowVideoPlay(video);
+        video.play?.()?.catch?.(() => {});
+      }
+    })
+    .catch(() => {});
 }
 
 /** Right-click → "Leave this element alone": mark it now, return the rule to save. */
@@ -609,6 +638,7 @@ function addMediaEventListeners() {
     document.addEventListener(name, mediaEventHandler, true);
   }
   document.addEventListener('click', frozenVideoClickHandler, true);
+  document.addEventListener('gaf-user-play', userPlayRequestHandler, true);
   // Track right-click target for context menu archive
   document.addEventListener('contextmenu', contextMenuTrackHandler, true);
 }
@@ -618,6 +648,7 @@ function removeMediaEventListeners() {
     document.removeEventListener(name, mediaEventHandler, true);
   }
   document.removeEventListener('click', frozenVideoClickHandler, true);
+  document.removeEventListener('gaf-user-play', userPlayRequestHandler, true);
   document.removeEventListener('contextmenu', contextMenuTrackHandler, true);
 }
 

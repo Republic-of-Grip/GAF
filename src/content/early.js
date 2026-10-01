@@ -264,6 +264,26 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
     }
   }
 
+  /**
+   * A page that is one specific video (watch / embed / player / episode, or
+   * /video/<id> such as X's single-video view): the video is what you opened.
+   * Narrower than settings.mjs PLAYER_PATH_RE on purpose — /videos, /media and
+   * /live listing pages are feeds, where the guard is wanted.
+   */
+  const SINGLE_VIDEO_PATH_RE = /\/(watch|embed|player|episode)(\/|$)|\/video\/[^/]+/i;
+
+  // Keep in sync with settings.mjs VIDEO_PLAY_ON and video-start-main.js.
+  function postVideoStartConfig(enabled, mode) {
+    try {
+      window.postMessage(
+        { source: 'gaf-extension', type: 'GAF_VIDEO_START_CONFIG', enabled: Boolean(enabled), mode },
+        '*',
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
   function applyBundle(settings, exclusionHosts) {
     const s = settings || {};
     let host = '';
@@ -285,6 +305,7 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
       ensureStyle(PREVIEW_ID, '');
       postTimeFreeze({ type: 'GAF_TIME_FREEZE_CONFIG', enabled: false, mode: 'off', factor: 1, minMs: 2000 });
       postPreviewVideoConfig({ enabled: false, videoPolicy: 'off', host });
+      postVideoStartConfig(false, 'any');
       return;
     }
 
@@ -307,6 +328,25 @@ preview-video+img,.preview-video-loaded+img,.preview-video-in-screen+img{opacity
       videoPolicy !== 'off' && !isMediaPlayerHost(host);
     ensureStyle(PREVIEW_ID, freezePreview ? PREVIEW_VIDEO_EARLY_CSS : '');
     postPreviewVideoConfig({ enabled: true, videoPolicy, host });
+
+    // Videos start only on click (or hover). Not on dedicated player sites
+    // (the video is what you came for), popups or payment / eID pages.
+    const playOn = ['click', 'hover', 'any'].includes(s.videoPlayOn) ? s.videoPlayOn : 'click';
+    let videoPath = '/';
+    try {
+      videoPath = location.pathname || '/';
+    } catch {
+      videoPath = '/';
+    }
+    postVideoStartConfig(
+      videoPolicy !== 'off' &&
+        playOn !== 'any' &&
+        !isMediaPlayerHost(host) &&
+        !SINGLE_VIDEO_PATH_RE.test(videoPath) &&
+        !isPopup &&
+        !isPaymentAuthHost(host),
+      playOn,
+    );
 
     if (s.elementHiding !== false) {
       const user = Array.isArray(s.hideRules) ? s.hideRules : [];

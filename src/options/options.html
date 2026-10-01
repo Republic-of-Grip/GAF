@@ -53,6 +53,19 @@
             </select>
           </label>
 
+          <label class="field stack">
+            <strong>Videos start on</strong>
+            <select id="videoPlayOn">
+              <option value="click">Click (default) — only when you click the video or its play button</option>
+              <option value="hover">Hover or click — resting the pointer on a video plays it; moving away pauses</option>
+              <option value="any">Site decides — no extra blocking</option>
+            </select>
+            <p class="hint">
+              Stops feeds (X and others) from starting videos as you scroll. Not applied on video sites
+              such as YouTube, to live camera / call video, or when <em>Video autoplay policy</em> is Off.
+            </p>
+          </label>
+
           <label class="field">
             <input type="checkbox" id="useDefaultNewsHosts" />
             <div>
