@@ -58,7 +58,10 @@
     for (const v of heldAutoplay) {
       if (failOpen || isAllowed(v)) {
         try {
-          if (strippedAutoplay.delete(v)) v.autoplay = true;
+          if (strippedAutoplay.delete(v)) {
+            delete v.dataset.gafAutoplayHeld;
+            v.autoplay = true;
+          }
           nativePlay.call(v)?.catch?.(() => {});
         } catch {
           /* ignore */
@@ -82,7 +85,16 @@
 
   const HOVER_DWELL_MS = 500;
   const SLACK_PX = 4;
-  const PLAY_LABEL_RE = /play|pause|spill|avspill|start|video|afspil|spela/i;
+  /** Whole words only (camelCase split first): X "playButton", Mixkit "Toggle Play", nb "Spill av". */
+  const PLAY_WORD_RE =
+    /\b(play|pause|resume|replay|spill(?: av)?|avspill|afspil|spela(?: upp)?|lecture|reproducir|abspielen|wiedergabe)\b/i;
+  /** Things a click can be "on" other than the video itself. */
+  const INTERACTIVE =
+    'a[href], button, [role="button"], [role="link"], input, select, textarea, label, summary, [contenteditable="true"], [contenteditable=""]';
+  /** A video opened in a viewer right after you started one inherits that click. */
+  const VIEWER = 'dialog, [role="dialog"], [aria-modal="true"]';
+  const VIEWER_FOLLOW_MS = 2000;
+  let lastUserArm = 0;
 
   /** video → 'user' (click / key: stays allowed) | 'hover' (until the pointer leaves). */
   const armed = new WeakMap();
@@ -108,6 +120,11 @@
     try {
       if (video.dataset?.gafUserPlay === '1') return true;
       if (video.closest?.('[data-gaf-allow]')) return true;
+      // X and others open the clicked video in a viewer with a new <video>.
+      if (now() - lastUserArm < VIEWER_FOLLOW_MS && video.closest?.(VIEWER)) {
+        armed.set(video, 'user');
+        return true;
+      }
     } catch {
       /* detached / odd element */
     }
@@ -173,37 +190,77 @@
     return null;
   }
 
-  function looksLikePlayControl(el) {
-    const control = el?.closest?.('button, [role="button"]');
-    if (!control) return null;
-    const label = [
-      control.getAttribute('aria-label'),
-      control.getAttribute('title'),
-      control.getAttribute('data-testid'),
-      (control.textContent || '').trim().slice(0, 40),
+  function controlLabel(control) {
+    let text = '';
+    try {
+      text = (control.textContent || '').trim().slice(0, 40);
+    } catch {
+      /* ignore */
+    }
+    return [
+      control.getAttribute?.('aria-label'),
+      control.getAttribute?.('title'),
+      control.getAttribute?.('data-testid'),
+      text,
     ]
       .filter(Boolean)
-      .join(' ');
-    // Icon-only buttons (no label at all) are usually the big play overlay.
-    if (!label || PLAY_LABEL_RE.test(label)) return control;
+      .join(' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2');
+  }
+
+  function isPlayControl(control) {
+    return Boolean(control) && PLAY_WORD_RE.test(controlLabel(control));
+  }
+
+  /** True if el covers at least half of the video's box (a play overlay or a link around it). */
+  function coversMuchOf(el, video) {
+    try {
+      const a = el.getBoundingClientRect();
+      const b = video.getBoundingClientRect();
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      return w > 0 && h > 0 && w * h >= 0.5 * b.width * b.height;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The video a completed click starts, or null.
+   * - On the video surface (or a plain layer over it): that video.
+   * - On a play/pause control: the video it belongs to.
+   * - On any other control (Like, Reply, mute, a CTA) over the video: nothing,
+   *   unless it is a big overlay / link covering the video.
+   */
+  function videoForClick(target, x, y) {
+    const under = videosAt(x, y);
+    let control = null;
+    try {
+      control = target?.closest?.(INTERACTIVE) || null;
+    } catch {
+      control = null;
+    }
+    if (!control) return under[0] || null;
+    if (isPlayControl(control)) return videoForControl(control) || under[0] || null;
+    if (under[0] && coversMuchOf(control, under[0])) return under[0];
     return null;
   }
 
   function armUser(video) {
     if (!video) return;
     armed.set(video, 'user');
+    lastUserArm = now();
     if (hoverVideo === video) hoverVideo = null;
   }
 
-  function onPointerDown(event) {
+  /**
+   * Arm on a completed click, not on pointerdown: a touch scroll that starts on
+   * a video, or a press that turns into a drag, never produces a click. Window
+   * capture runs before the page's own click handler calls play().
+   */
+  function onClick(event) {
     if (mode === 'any' || !event.isTrusted || event.button !== 0) return;
-    const hits = videosAt(event.clientX, event.clientY);
-    if (hits.length) {
-      hits.forEach(armUser);
-      return;
-    }
-    const control = looksLikePlayControl(event.target);
-    if (control) armUser(videoForControl(control));
+    armUser(videoForClick(event.target, event.clientX, event.clientY));
   }
 
   function isTyping(el) {
@@ -213,6 +270,7 @@
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   }
 
+  /** Space / Enter / K start the focused video, or the video of a focused play button. */
   function onKeyDown(event) {
     if (mode === 'any' || !event.isTrusted) return;
     if (event.key !== ' ' && event.key !== 'Enter' && event.key !== 'k' && event.key !== 'K') return;
@@ -222,15 +280,22 @@
       armUser(active);
       return;
     }
-    if (active.closest?.('button, [role="button"]') || active.querySelector?.('video')) {
-      armUser(videoForControl(active));
+    let control = null;
+    try {
+      control = active.closest?.('button, [role="button"]') || null;
+    } catch {
+      control = null;
     }
+    if (isPlayControl(control)) armUser(videoForControl(control));
   }
 
   // ---- Hover mode -------------------------------------------------------
   let pointer = null; // { x, y } while the pointer is inside the window
   let lastScroll = 0;
   let dwellTimer = 0;
+
+  /** Videos whose data-gaf-user-play mark came from hover (removed again on leave). */
+  const hoverMarked = new WeakSet();
 
   function stopHoverVideo() {
     const v = hoverVideo;
@@ -242,6 +307,35 @@
       } catch {
         /* ignore */
       }
+      if (hoverMarked.has(v)) {
+        hoverMarked.delete(v);
+        try {
+          delete v.dataset.gafUserPlay;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  function startHoverVideo(v) {
+    armed.set(v, 'hover');
+    hoverVideo = v;
+    try {
+      if (v.dataset.gafUserPlay !== '1') {
+        // GAF's media freeze (isolated world) skips user-started videos.
+        v.dataset.gafUserPlay = '1';
+        hoverMarked.add(v);
+      }
+      // Lets the isolated world restore sources GAF stripped from a frozen video.
+      v.dispatchEvent(new CustomEvent('gaf-user-play', { bubbles: true }));
+    } catch {
+      /* ignore */
+    }
+    try {
+      nativePlay.call(v)?.catch?.(() => {});
+    } catch {
+      /* ignore */
     }
   }
 
@@ -258,15 +352,7 @@
     const under = videosAt(pointer.x, pointer.y)[0] || null;
     if (hoverVideo && hoverVideo !== under) stopHoverVideo();
     if (!under || armed.get(under) === 'user' || isLiveStream(under)) return;
-    if (!armed.has(under)) {
-      armed.set(under, 'hover');
-      hoverVideo = under;
-      try {
-        nativePlay.call(under)?.catch?.(() => {});
-      } catch {
-        /* ignore */
-      }
-    }
+    if (!armed.has(under)) startHoverVideo(under);
   }
 
   function scheduleHover() {
@@ -307,6 +393,8 @@
     if (configured && isAllowed(v)) return;
     try {
       v.autoplay = false;
+      // Read by freeze-media (original autoplay) and Leave this element alone (restart).
+      v.dataset.gafAutoplayHeld = '1';
     } catch {
       return;
     }
@@ -317,6 +405,7 @@
   function restoreStrippedAutoplay() {
     for (const v of strippedAutoplay) {
       try {
+        delete v.dataset.gafAutoplayHeld;
         v.autoplay = true;
         if (v.paused) nativePlay.call(v)?.catch?.(() => {});
       } catch {
@@ -381,7 +470,7 @@
   }
 
   const opts = { capture: true, passive: true };
-  window.addEventListener('pointerdown', onPointerDown, opts);
+  window.addEventListener('click', onClick, opts);
   window.addEventListener('keydown', onKeyDown, opts);
   window.addEventListener('pointermove', onPointerMove, opts);
   window.addEventListener('scroll', onScroll, opts);

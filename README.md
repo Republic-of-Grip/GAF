@@ -32,11 +32,11 @@ Muted autoplay still starts paused, including a stock-video page such as Mixkit.
 
 Feeds such as X start videos from their own script as each post scrolls into view; the videos carry no `autoplay` attribute, so the autoplay policy above never saw them. **Videos start on** stops that at the source: a page's request to start a video is refused exactly the way the browser's own autoplay block refuses it, and the site shows its normal play button.
 
-- **Click** (default): a video plays when you click it, its play overlay or a play button beside it, or focus it and press Space / Enter / K. Once you started a video it may keep playing (buffering, scrolling back).
+- **Click** (default): a video plays when you click it, its play overlay or a play / pause button that belongs to it, or focus the video (or its play button) and press Space / Enter / K. Clicking other buttons on top of a video — Like, mute, a shop link — does not start it, and neither does a touch-scroll that begins on it. Once you started a video it may keep playing (buffering, scrolling back), and a viewer that opens right after your click (X's media viewer) plays too.
 - **Hover or click**: also plays a video when the pointer rests on it for about half a second without scrolling; moving the pointer away pauses it again. Scrolling past videos does not start them.
 - **Site decides**: no extra blocking.
 
-Not applied on dedicated video sites (YouTube, Vimeo, Twitch, Netflix and the like), to live camera / video-call streams, to audio, in popup windows or payment / eID pages, when the site is excluded or the tab is paused, or when *Video autoplay policy* is Off. *Leave this element alone* rules also let a video play. Choose the mode in the popup or in Options → Video.
+Not applied on dedicated video sites (YouTube, Vimeo, Twitch, Netflix and the like) or pages that are one specific video (`/watch`, `/embed/…`, `/video/<id>` such as X's single-video view — listing pages like `/videos` or a profile's media tab keep the guard), to live camera / video-call streams, to audio, in popup windows or payment / eID pages, when the site is excluded or the tab is paused, or when *Video autoplay policy* is Off. *Leave this element alone* rules also let a video play, including restarting one whose autoplay GAF held back. Choose the mode in the popup or in Options → Video.
 
 ## Soft paywalls (“slow / stop time”)
 

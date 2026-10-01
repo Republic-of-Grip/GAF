@@ -641,8 +641,12 @@ export function freezeVideoElement(video, options = {}) {
   if (!matcher(video)) return false;
 
   video.dataset.gafFrozen = 'video';
+  // gafAutoplayHeld: the video-start guard (video-start-main.js) already switched
+  // autoplay off at loadstart; the page's original intent was autoplay.
   video.dataset.gafOriginalAutoplay = String(
-    Boolean(video.autoplay || video.hasAttribute?.('autoplay'))
+    Boolean(
+      video.autoplay || video.hasAttribute?.('autoplay') || video.dataset?.gafAutoplayHeld === '1'
+    )
   );
   video.dataset.gafOriginalLoop = String(Boolean(video.loop || video.hasAttribute?.('loop')));
   video.dataset.gafOriginalPreload = video.getAttribute?.('preload') ?? '';
