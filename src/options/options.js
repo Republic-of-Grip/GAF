@@ -37,6 +37,7 @@ function fill(s) {
   $('enabled').checked = s.enabled;
   $('freezeImages').checked = s.freezeImages;
   $('videoPolicy').value = s.videoPolicy;
+  $('videoPlayOn').value = s.videoPlayOn;
   $('useDefaultNewsHosts').checked = s.useDefaultNewsHosts;
   $('newsHosts').value = hostListToText(s.newsHosts);
   $('motionLevel').value = s.motionLevel;
@@ -80,6 +81,7 @@ function read() {
     enabled: $('enabled').checked,
     freezeImages: $('freezeImages').checked,
     videoPolicy: $('videoPolicy').value,
+    videoPlayOn: $('videoPlayOn').value,
     useDefaultNewsHosts: $('useDefaultNewsHosts').checked,
     newsHosts: parseHostList($('newsHosts').value),
     motionLevel: $('motionLevel').value,

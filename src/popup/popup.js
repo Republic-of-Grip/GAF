@@ -50,6 +50,7 @@ function fillForm(s) {
   $('enabled').checked = s.enabled;
   $('freezeImages').checked = s.freezeImages;
   $('videoPolicy').value = s.videoPolicy;
+  $('videoPlayOn').value = s.videoPlayOn;
   $('motionLevel').value = s.motionLevel;
   $('timeFreezeMode').value = s.timeFreezeMode;
   $('elementHiding').checked = s.elementHiding;
@@ -62,6 +63,7 @@ function readForm() {
     enabled: $('enabled').checked,
     freezeImages: $('freezeImages').checked,
     videoPolicy: $('videoPolicy').value,
+    videoPlayOn: $('videoPlayOn').value,
     motionLevel: $('motionLevel').value,
     timeFreezeMode: $('timeFreezeMode').value,
     elementHiding: $('elementHiding').checked,
@@ -210,6 +212,7 @@ async function init() {
   $('enabled').addEventListener('change', saveFromForm);
   $('freezeImages').addEventListener('change', saveFromForm);
   $('videoPolicy').addEventListener('change', saveFromForm);
+  $('videoPlayOn').addEventListener('change', saveFromForm);
   $('motionLevel').addEventListener('change', saveFromForm);
   $('timeFreezeMode').addEventListener('change', saveFromForm);
   $('elementHiding').addEventListener('change', saveFromForm);
