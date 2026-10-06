@@ -281,3 +281,13 @@ footer a:hover {
 footer .btn {
   flex: 1;
 }
+
+/* Remote connection choices (issue #22: native <select> unreliable in this popup) */
+.route-label { font-size: 13px; }
+.route-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.route-choices:empty { display: none; }
+.route-choices label { position: relative; display: block; }
+.route-choices input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.route-choices span { display: block; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.route-choices input:checked + span { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.route-choices input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }

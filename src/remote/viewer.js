@@ -34,7 +34,21 @@ async function heartbeat() {
 }
 const screen = $('screen');
 const drawing = screen.getContext('2d');
-const status = text => { $('status').textContent = text; };
+/**
+ * Write only when the value changes. Rewriting identical text every poll still
+ * re-lays out the toolbar row, and Chromium then collapses or misplaces an
+ * open control in that row (issue #22).
+ */
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+const status = text => setText($('status'), text);
+const WAITING = 'Waiting for the remote page…';
+const radioValue = name => document.querySelector(`input[name="${name}"]:checked`)?.value || '';
+function setRadio(name, value) {
+  const input = document.querySelector(`input[name="${name}"][value="${CSS.escape(value)}"]`);
+  if (input && !input.checked) input.checked = true;
+}
 const request = (action, options) => remoteRequest(session.endpoint, `/sessions/${session.id}/${action}`, session.ownerToken, options);
 
 function clearInvitation() {
@@ -68,16 +82,22 @@ async function refreshState() {
   // A poll started before Take over must not repaint the older grant afterward.
   if (state.accessRevision < accessRevision) return;
   const active = state.pages.find(p => p.id === state.active);
-  if (document.activeElement !== $('url')) $('url').value = active?.url || '';
-  // Keep remote page titles out of the local browser's navigation history.
-  document.title = 'GAF · Shared session';
-  const selected = $('pages').value;
-  $('pages').replaceChildren(...state.pages.map(p => new Option(p.title || p.url || 'Opening…', p.id)));
-  $('pages').value = state.active || selected;
-  $('closePopup').disabled = state.pages.length < 2;
-  $('permission').textContent = state.access === 'off' ? 'Agent access off' : `${state.agent} · ${state.access === 'read' ? 'read only' : 'can interact'}`;
-  $('lifetime').textContent = `Idle timeout in ${Math.ceil(state.idleSecondsLeft / 60)} min`;
+  const url = active?.url || '';
+  if (document.activeElement !== $('url') && $('url').value !== url) $('url').value = url;
+  // The window list is rebuilt only when it actually changed, and never while
+  // its menu may be open.
+  const signature = state.pages.map(p => `${p.id}\u0000${p.title || p.url}`).join('\n') + `\n${state.active}`;
+  if (signature !== pagesSignature && document.activeElement !== $('pages')) {
+    pagesSignature = signature;
+    $('pages').replaceChildren(...state.pages.map(p => new Option(p.title || p.url || 'Opening…', p.id)));
+    $('pages').value = state.active;
+  }
+  const single = state.pages.length < 2;
+  if ($('closePopup').disabled !== single) $('closePopup').disabled = single;
+  setText($('permission'), state.access === 'off' ? 'Agent access off' : `${state.agent} · ${state.access === 'read' ? 'read only' : 'can interact'}`);
+  setText($('lifetime'), `Idle timeout in ${Math.ceil(state.idleSecondsLeft / 60)} min`);
 }
+let pagesSignature = '';
 let framing = false;
 async function frame() {
   if (stopped || framing || document.hidden) return;
@@ -91,7 +111,9 @@ async function frame() {
     const bitmap = await createImageBitmap(await response.blob());
     if (!stopped) drawing.drawImage(bitmap, 0, 0, screen.width, screen.height);
     bitmap.close();
-  } catch { if (!stopped) status('Waiting for the remote page…'); }
+    // A painted frame ends the wait (it used to stay up for the whole session).
+    if (!stopped && $('status').textContent === WAITING) status('');
+  } catch { if (!stopped) status(WAITING); }
   finally { framing = false; }
 }
 
@@ -99,12 +121,12 @@ async function setAccess(access) {
   const revision = ++accessRevision;
   clearInvitation();
   if (access === 'off') {
-    $('access').value = 'off';
-    $('permission').textContent = 'Revoking agent access…';
+    setRadio('access', 'off');
+    setText($('permission'), 'Revoking agent access…');
   }
-  const result = await request('grant', { method: 'POST', body: { access, agent: $('agent').value, revision } });
+  const result = await request('grant', { method: 'POST', body: { access, agent: radioValue('agent'), revision } });
   if (stopped || revision !== accessRevision) return;
-  $('access').value = access;
+  setRadio('access', access);
   if (result.agentToken) {
     $('invitation').hidden = false;
     $('invitation').open = true;
@@ -120,13 +142,22 @@ async function init() {
   const response = await chrome.runtime.sendMessage({ type: 'GAF_REMOTE_RECORD' });
   if (!response?.ok || !response.session) return finish('No active session. Open a website and choose Reload this URL remotely in GAF.');
   session = response.session;
-  $('route').textContent = `Route: ${session.routeName} · ${new URL(session.endpoint).host}`;
+  setText($('route'), `Route: ${session.routeName} · ${new URL(session.endpoint).host}`);
   const state = await request('state');
   accessRevision = state.accessRevision;
-  $('agent').replaceChildren(...state.agents.map(name => new Option(name, name)));
-  if (!state.agents.length) {
-    $('agent').add(new Option('Add agents in GAF Options', ''));
-    $('grant').disabled = true; $('access').disabled = true;
+  if (state.agents.length) {
+    $('agents').replaceChildren(...state.agents.map((name, i) => {
+      const label = document.createElement('label');
+      const radio = Object.assign(document.createElement('input'), { type: 'radio', name: 'agent', value: name, checked: i === 0 });
+      const text = document.createElement('span');
+      text.textContent = name;
+      label.append(radio, text);
+      return label;
+    }));
+  } else {
+    $('agents').replaceChildren(Object.assign(document.createElement('span'), { className: 'muted', textContent: 'Add agents in GAF Options' }));
+    $('grant').disabled = true;
+    for (const radio of document.querySelectorAll('input[name="access"]')) radio.disabled = true;
   }
   // Reloading the viewer returns control to its user; never silently keep an old invitation.
   await setAccess('off');
@@ -142,7 +173,7 @@ async function init() {
   $('reload').onclick = () => input({ type: 'reload' });
   $('pages').onchange = () => input({ type: 'selectPage', id: $('pages').value });
   $('closePopup').onclick = () => input({ type: 'closePopup' });
-  $('grant').onclick = () => setAccess($('access').value).catch(() => status('Could not grant access. Choose an agent and retry.'));
+  $('grant').onclick = () => setAccess(radioValue('access')).catch(() => status('Could not grant access. Choose an agent and retry.'));
   $('takeover').onclick = () => setAccess('off').catch(() => status('Could not confirm revocation. End the session to disconnect.'));
   $('revealToken').onclick = () => { const showing = $('agentToken').type === 'password'; $('agentToken').type = showing ? 'text' : 'password'; $('revealToken').textContent = showing ? 'Hide token' : 'Show token'; };
   $('end').onclick = async () => {
@@ -152,7 +183,9 @@ async function init() {
     } catch { finish('Session disconnected. Remote cleanup follows when the owner lease expires.'); }
   };
   screen.addEventListener('click', event => {
-    screen.focus();
+    // Focus for typing without scrolling the viewer: a plain focus() scrolled
+    // the toolbars out of view (issue #22).
+    screen.focus({ preventScroll: true });
     const rect = screen.getBoundingClientRect();
     void input({ type: 'click', x: (event.clientX - rect.left) * 1280 / rect.width, y: (event.clientY - rect.top) * 800 / rect.height });
   });

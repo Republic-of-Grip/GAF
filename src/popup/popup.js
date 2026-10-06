@@ -162,16 +162,23 @@ async function persist(partial) {
 async function init() {
   const remote = await loadRemoteSettings();
   for (const provider of remote.providers) {
-    $('remoteRoute').add(new Option(provider.name, provider.id));
+    const label = document.createElement('label');
+    const radio = Object.assign(document.createElement('input'), {
+      type: 'radio', name: 'remoteRoute', value: provider.id, checked: provider.id === remote.defaultProvider,
+    });
+    const text = document.createElement('span');
+    text.textContent = provider.name;
+    label.append(radio, text);
+    $('remoteRoute').append(label);
   }
-  $('remoteRoute').value = remote.defaultProvider;
+  $('reloadRemote').disabled = !remote.providers.length;
   $('remoteStatus').textContent = remote.providers.length ? 'Fresh session · agent access starts off' : 'Set up connections in Options → Shared sessions.';
   $('reloadRemote').addEventListener('click', async () => {
     $('reloadRemote').disabled = true;
     $('remoteStatus').textContent = 'Starting remote session…';
     try {
       const tab = await getActiveTab();
-      const result = await chrome.runtime.sendMessage({ type: 'GAF_REMOTE_OPEN', tabId: tab?.id, providerId: $('remoteRoute').value });
+      const result = await chrome.runtime.sendMessage({ type: 'GAF_REMOTE_OPEN', tabId: tab?.id, providerId: document.querySelector('input[name="remoteRoute"]:checked')?.value || remote.defaultProvider });
       if (!result?.ok) throw new Error(result?.error || 'Could not start a remote session.');
       window.close();
     } catch (error) {

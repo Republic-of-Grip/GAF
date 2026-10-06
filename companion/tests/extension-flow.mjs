@@ -79,7 +79,7 @@ try {
   const auth = await popupReady; await auth.waitForLoadState();
   await source.waitForFunction(() => document.querySelector('#pages').options.length === 2);
   await source.selectOption('#pages', [...session.pages].find(([, page]) => page === session.root)[0]);
-  await source.selectOption('#access', 'interact');
+  await source.getByRole('radio', { name: 'Can interact' }).check();
   await source.getByRole('button', { name: 'Apply access' }).click();
   await source.locator('#invitation').waitFor({ state: 'visible' });
   const token = await source.locator('#agentToken').inputValue();
@@ -94,7 +94,7 @@ try {
   await source.getByRole('button', { name: 'Take over · revoke access' }).click();
   await source.locator('#invitation').waitFor({ state: 'hidden' });
   await source.getByText('You have control. Agent access revoked', { exact: false }).waitFor();
-  assert.equal(await source.locator('#access').inputValue(), 'off');
+  assert.equal(await source.locator('input[name="access"]:checked').inputValue(), 'off');
   assert.equal(await source.locator('#permission').innerText(), 'Agent access off');
   await assert.rejects(client.listTools());
   assert.equal(session.grant, null);

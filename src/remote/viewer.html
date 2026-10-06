@@ -16,8 +16,14 @@
     <button id="closePopup" type="button">Close pop-up</button>
   </nav>
   <section class="sharing" aria-label="Agent controls">
-    <label>Agent <select id="agent"><option value="">No configured agents</option></select></label>
-    <label>Access <select id="access"><option value="off">Off</option><option value="read">Read only</option><option value="interact">Can interact</option></select></label>
+    <span class="group-label" id="agentLabel">Agent</span>
+    <div id="agents" class="segmented" role="radiogroup" aria-labelledby="agentLabel"><span class="muted">No configured agents</span></div>
+    <span class="group-label" id="accessLabel">Access</span>
+    <div id="accessGroup" class="segmented" role="radiogroup" aria-labelledby="accessLabel">
+      <label><input type="radio" name="access" value="off" checked><span>Off</span></label>
+      <label><input type="radio" name="access" value="read"><span>Read only</span></label>
+      <label><input type="radio" name="access" value="interact"><span>Can interact</span></label>
+    </div>
     <button id="grant" type="button">Apply access</button>
     <button id="takeover" type="button">Take over · revoke access</button>
     <span id="permission">Agent access off</span>

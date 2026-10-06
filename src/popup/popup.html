@@ -96,7 +96,10 @@
     </section>
 
     <section class="updates" aria-label="Shared session">
-      <label class="row"><span>Remote connection</span><select id="remoteRoute" aria-label="Remote connection"></select></label>
+      <span class="route-label" id="remoteRouteLabel">Remote connection</span>
+      <!-- Choices, not a native <select>: its menu was unreliable near the edge of
+           the scrolling popup on Linux Helium (issue #22). -->
+      <div id="remoteRoute" class="route-choices" role="radiogroup" aria-labelledby="remoteRouteLabel"></div>
       <button type="button" id="reloadRemote" class="btn ghost">Reload this URL remotely</button>
       <p id="remoteStatus" class="update-status" role="status" aria-live="polite"></p>
     </section>
