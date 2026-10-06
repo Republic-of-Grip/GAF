@@ -13,20 +13,61 @@ export function sameSecret(a, b) {
  * there and then read the page, so the remote browser never loads them: typed
  * addresses are refused (pageUrl) and Chromium's resolver refuses the hosts
  * for links, redirects, frames and subresources (METADATA_RESOLVER_RULES).
- * A hostname that merely resolves to one of these addresses is not caught;
- * on a cloud host also require IMDSv2 / block metadata at the network.
+ * Every spelling counts: dotted IPv4, IPv4-mapped and NAT64 IPv6
+ * ([::ffff:a9fe:a9fe], [64:ff9b::a9fe:a9fe]) and hostnames with a trailing
+ * dot (metadata.google.internal.). A hostname that merely resolves to one of
+ * these addresses is not caught; on a cloud host also require IMDSv2 / block
+ * metadata at the network.
  */
-export const METADATA_RESOLVER_RULES = [
-  '169.254.*', '100.100.100.200', 'fd00:ec2::254', '[fd00:ec2::254]',
-  'metadata.google.internal', '*.metadata.google.internal', 'metadata.goog',
-].map(host => `MAP ${host} ~NOTFOUND`).join(', ');
+export const METADATA_HOSTS = {
+  ipv4: ['169.254.*', '100.100.100.200'], // link-local (AWS, Azure, GCP, Oracle, DO, ECS); Alibaba
+  ipv6: ['fd00:ec2::254'], // AWS IPv6
+  names: ['metadata.google.internal', 'metadata.goog'],
+};
+const IPV6_V4_PREFIXES = ['::ffff:', '64:ff9b::']; // IPv4-mapped, NAT64
+
+/** Chromium's canonical IPv6 group for two IPv4 octets (no leading zeros). */
+const v4Group = (a, b) => ((Number(a) << 8) | Number(b)).toString(16);
+
+/**
+ * --host-resolver-rules that refuse every spelling of the given hosts.
+ * ipv4: exact 'a.b.c.d' or two-octet prefix 'a.b.*'; ipv6: canonical
+ * literals without brackets; names: each also with a trailing dot and as
+ * *.name / *.name. — Chromium matches rules on the literal host text, so
+ * 'example.com' does not cover 'example.com.' and '[::ffff:…]' never matches.
+ */
+export function resolverRulesFor({ ipv4 = [], ipv6 = [], names = [] } = {}) {
+  const hosts = [];
+  for (const entry of ipv4) {
+    const parts = entry.split('.');
+    hosts.push(entry);
+    const tail = parts.length === 3 && parts[2] === '*'
+      ? `${v4Group(parts[0], parts[1])}:*`
+      : `${v4Group(parts[0], parts[1])}:${v4Group(parts[2], parts[3])}`;
+    for (const prefix of IPV6_V4_PREFIXES) hosts.push(`${prefix}${tail}`);
+  }
+  hosts.push(...ipv6);
+  for (const name of names) hosts.push(name, `${name}.`, `*.${name}`, `*.${name}.`);
+  return hosts.map(host => `MAP ${host} ~NOTFOUND`).join(', ');
+}
+export const METADATA_RESOLVER_RULES = resolverRulesFor(METADATA_HOSTS);
+
+/** The IPv4 address inside an IPv4-mapped / NAT64 IPv6 literal, or ''. */
+function embeddedIPv4(host) {
+  const m = /^(?:::ffff:|64:ff9b::)(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(host);
+  if (!m) return '';
+  if (m[1]) return m[1];
+  const hi = parseInt(m[2], 16), lo = parseInt(m[3], 16);
+  return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.');
+}
 
 export function isMetadataHost(hostname) {
-  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  return /^169\.254\.\d{1,3}\.\d{1,3}$/.test(h) || // link-local: AWS, Azure, GCP, Oracle, DO, ECS
-    h === '100.100.100.200' || // Alibaba Cloud
-    h === 'fd00:ec2::254' || // AWS IPv6
-    h === 'metadata.google.internal' || h === 'metadata.goog' || h.endsWith('.metadata.google.internal');
+  let h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  h = embeddedIPv4(h) || h;
+  return /^169\.254\.\d{1,3}\.\d{1,3}$/.test(h) ||
+    h === '100.100.100.200' ||
+    h === 'fd00:ec2::254' ||
+    METADATA_HOSTS.names.some(name => h === name || h.endsWith(`.${name}`));
 }
 
 export function pageUrl(value) {
