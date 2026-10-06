@@ -31,9 +31,24 @@
         <button type="button" class="tab" data-tab="backlog">Exclusion backlog</button>
         <button type="button" class="tab" data-tab="archive">Inspection archive</button>
         <button type="button" class="tab" data-tab="advanced">Advanced</button>
+        <button type="button" class="tab" data-tab="remote">Shared sessions</button>
       </nav>
 
       <main>
+        <section class="card tab-panel" data-panel="remote">
+          <h2>Remote connections</h2>
+          <p class="hint">Connect to a GAF companion running locally or on your cloud server. Each connection is a route; browsing uses that server's network. Connection keys stay on this browser, outside sync and filter exports.</p>
+          <div id="remoteConnections"></div>
+          <button type="button" id="remoteAdd" class="btn">Add connection</button>
+          <label class="field stack"><strong>Default connection</strong><select id="remoteDefault"></select></label>
+          <label class="field stack"><strong>End after inactivity (minutes)</strong><input id="remoteTimeout" type="number" min="1" max="60" value="15" /></label>
+          <h2>Agents</h2>
+          <label class="field stack"><strong>Agent names, one per line</strong><textarea id="remoteAgents" rows="3" placeholder="My assistant&#10;Grok Bot"></textarea></label>
+          <p class="hint">Names label invitations. In each session you choose an agent and access level, then connect its MCP-capable client using the temporary connection shown in the remote tab. Adding a name does not connect or grant access automatically. Agent clients may retain their own history.</p>
+          <div class="footer-actions"><button type="button" id="remoteSave" class="btn primary">Save shared-session settings</button></div>
+          <p id="remoteSettingsStatus" class="hint" role="status" aria-live="polite"></p>
+          <p class="hint">Start with the companion setup in the repository's <a href="https://github.com/Republic-of-Grip/GAF/blob/main/docs/SHARED-SESSIONS.md" target="_blank" rel="noreferrer">Shared sessions guide</a>. A local companion uses this computer's network, including its VPN. Cloud hosting uses the cloud server's IP.</p>
+        </section>
         <section class="card tab-panel active" data-panel="filters">
           <h2>Media &amp; motion</h2>
           <label class="field">

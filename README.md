@@ -6,7 +6,9 @@ Take back control of noisy pages: autoplay thumbnails, looping GIFs, decorative 
 
 > Not a universal paywall cracker. GAF bends timers, freezes motion, and hides chrome that already arrived in the browser — the same arms race as ad/tracker blocking.
 
-## Features (v0.2.35)
+## Features (v0.2.36)
+
+**Temporary shared tabs (prototype):** Options → **Shared sessions** connects GAF to a local or cloud-hosted companion. Popup → **Reload this URL remotely** opens the current URL in a fresh remote browser session in that same tab. Log in manually, invite a trusted MCP-capable agent with read-only or interaction access, and take over at any time. Closing the tab, ending the session or a timeout tears down its browser and related login windows. Connection settings stay local, outside sync/export; external agent history is controlled by that agent. See [setup, permissions, cleanup limits and verification](docs/SHARED-SESSIONS.md). The companion is separate from the existing Helium Debug profile; no cloud service is provisioned automatically.
 
 | Feature | Default | What it does |
 |--------|---------|----------------|
@@ -140,7 +142,7 @@ Each entry stores:
 2. `chrome://extensions` (or `helium://extensions`) → Developer mode → **Load unpacked**
 3. Pin GAF; open Options for backlog & archive
 
-Reload the extension after upgrades (0.1 → 0.2). **0.2.35** adds **Videos start on: Click** (default) / **Hover or click** / **Site decides** — feeds like X no longer start videos as you scroll. **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, keeps automatic meter resets off on a paused tab, ignores an older pause reply when a newer pause or resume is already in flight (including when a history change or meter re-read overlaps that choice), and fixes **Leave this element alone** when the element or an ancestor has an id or class that starts with a digit. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
+Reload the extension after upgrades (0.1 → 0.2). **0.2.36** adds temporary shared tabs and optional session-scoped MCP agent access; see the companion setup guide above. **0.2.35** adds **Videos start on: Click** (default) / **Hover or click** / **Site decides** — feeds like X no longer start videos as you scroll. **0.2.34** restores the ON/OFF toolbar badge when a paused tab is resumed, keeps automatic meter resets off on a paused tab, ignores an older pause reply when a newer pause or resume is already in flight (including when a history change or meter re-read overlaps that choice), and fixes **Leave this element alone** when the element or an ancestor has an id or class that starts with a digit. **0.2.33** adds right-click **Leave this element alone**. **0.2.32** adds **Pause on this tab**. **0.2.31** stops the interaction guard from hiding checkout / 3-D Secure / captcha overlays. **0.2.30** ships the Mixkit play-control thaw (muted autoplay stays paused until you hit play). **0.2.29+:** **Check for updates** finds a newer GitHub version; **Update** downloads it into the GAF folder Helium already loaded. Then open `helium://extensions` / `chrome://extensions` and click **Reload** on the GAF card. Do **not** Load unpacked again. The first download may ask you to point at that existing folder so files can land there.
 
 ## Updates
 
@@ -211,7 +213,9 @@ gaf/
 
 ## Privacy
 
-Settings are stored locally and mirrored, best-effort, to `chrome.storage.sync`. On browsers with account sync enabled, that mirror may be uploaded and shared across your synced browsers. Local settings remain authoritative; sync is also used as a legacy fallback when local settings are missing.
+Shared-session connection settings (including connection keys) stay in a separate local store, outside sync and filter exports. Temporary tab/session metadata uses `chrome.storage.session`. Remote reload contacts only your selected companion; it receives the requested URL and manual interactions and uses its own network to access websites. Session teardown closes its browser and pop-ups. An external agent/client controls its own transcript retention. See [shared-session cleanup and limits](docs/SHARED-SESSIONS.md).
+
+Filter settings are stored locally and mirrored, best-effort, to `chrome.storage.sync`. On browsers with account sync enabled, that mirror may be uploaded and shared across your synced browsers. Local settings remain authoritative; sync is also used as a legacy fallback when local settings are missing.
 
 The exclusion backlog and inspection archive stay in `chrome.storage.local`. Automatic reset retry records and per-tab pauses (tab id plus the page URL at the time you paused) stay in `chrome.storage.session`, which the browser clears on restart. Archive entries can contain page URLs, titles and HTML; exported filter packs include exclusion URLs and notes, and your settings, including *Leave this element alone* rules (site names and element selectors), which are also part of the settings sync mirror. Review these before sharing them or attaching them to public issues.
 
