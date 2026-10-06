@@ -89,3 +89,28 @@ test('a slow old-session deletion cannot erase the new session after navigating 
   release(); await ending;
   assert.equal((await controller.record(7)).id, '2'.repeat(32));
 });
+
+// ---- Review follow-ups (shared sessions) ---------------------------------
+import { connectionVerdict, OWNER_LEASE_MS } from '../src/core/remote-session.mjs';
+import { readFileSync } from 'node:fs';
+
+test('failed requests carry the HTTP status so the viewer can tell "ended" from "retry"', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 410, json: async () => ({ error: 'Session ended or access denied.' }) });
+  const error = await remoteRequest('http://127.0.0.1:8765', '/sessions/x/state', 't', { fetchImpl }).catch(e => e);
+  assert.equal(error.status, 410);
+  assert.equal(error.message, 'Session ended or access denied.');
+});
+
+test('a transient failure keeps the session; only 410 or a lapsed owner lease ends it', () => {
+  assert.equal(connectionVerdict({ status: 410 }, 0), 'ended');
+  assert.equal(connectionVerdict(new TypeError('Failed to fetch'), 5_000), 'retry', 'Wi-Fi blip');
+  assert.equal(connectionVerdict({ status: 400 }, 30_000), 'retry', 'busy companion');
+  assert.equal(connectionVerdict(new Error('timeout'), OWNER_LEASE_MS + 1), 'expired');
+  assert.equal(OWNER_LEASE_MS, 90_000);
+  const companion = readFileSync(new URL('../companion/sessions.mjs', import.meta.url), 'utf8');
+  assert.match(companion, /leaseMs = 90_000/, 'viewer lease mirrors the companion');
+  const viewer = readFileSync(new URL('../src/remote/viewer.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(viewer, /refreshState\(\)\.catch\(\(\) => finish/, 'one failed poll must not end the session');
+  assert.match(viewer, /refreshState\(\)\.catch\(connectionProblem\)/);
+  assert.match(viewer, /heartbeat\(\)\.catch\(connectionProblem\)/);
+});

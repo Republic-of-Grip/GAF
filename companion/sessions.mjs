@@ -7,9 +7,32 @@ export function sameSecret(a, b) {
   const left = Buffer.from(a), right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
 }
+/**
+ * Cloud instance-metadata services hand out the host's credentials over plain
+ * HTTP. A website could get an agent with interaction access to click a link
+ * there and then read the page, so the remote browser never loads them: typed
+ * addresses are refused (pageUrl) and Chromium's resolver refuses the hosts
+ * for links, redirects, frames and subresources (METADATA_RESOLVER_RULES).
+ * A hostname that merely resolves to one of these addresses is not caught;
+ * on a cloud host also require IMDSv2 / block metadata at the network.
+ */
+export const METADATA_RESOLVER_RULES = [
+  '169.254.*', '100.100.100.200', 'fd00:ec2::254', '[fd00:ec2::254]',
+  'metadata.google.internal', '*.metadata.google.internal', 'metadata.goog',
+].map(host => `MAP ${host} ~NOTFOUND`).join(', ');
+
+export function isMetadataHost(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  return /^169\.254\.\d{1,3}\.\d{1,3}$/.test(h) || // link-local: AWS, Azure, GCP, Oracle, DO, ECS
+    h === '100.100.100.200' || // Alibaba Cloud
+    h === 'fd00:ec2::254' || // AWS IPv6
+    h === 'metadata.google.internal' || h === 'metadata.goog' || h.endsWith('.metadata.google.internal');
+}
+
 export function pageUrl(value) {
   const url = new URL(value);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Only HTTP/HTTPS page addresses are supported.');
+  if (isMetadataHost(url.hostname)) throw new Error('Cloud metadata addresses are blocked.');
   return url.href;
 }
 
@@ -29,7 +52,7 @@ export class Sessions {
     let session;
     try {
       // Each session owns its browser process and a fresh non-persistent context.
-      browser = await this.launch({ headless: true, executablePath: this.executablePath });
+      browser = await this.launch({ headless: true, executablePath: this.executablePath, args: [`--host-resolver-rules=${METADATA_RESOLVER_RULES}`] });
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: false, serviceWorkers: 'block' });
       context.setDefaultTimeout(3000);
       session = {
@@ -64,10 +87,15 @@ export class Sessions {
     page.on('download', download => { void download.cancel().catch(() => {}); });
     page.on('close', () => {
       session.pages.delete(id);
-      session.refs.clear();
+      this.clearRefs(session);
       if (session.active === id) session.active = session.pages.keys().next().value || '';
     });
-    page.on('framenavigated', () => session.refs.clear());
+    page.on('framenavigated', () => this.clearRefs(session));
+  }
+  /** Forget control references and release their browser-side element handles. */
+  clearRefs(s) {
+    for (const { element } of s.refs.values()) void element.dispose().catch(() => {});
+    s.refs.clear();
   }
   expired(s) {
     return s.closed || this.now() - s.lastOwner >= this.leaseMs ||
@@ -107,7 +135,7 @@ export class Sessions {
     // Synchronous revocation prevents queued actions from running after Take over.
     s.epoch++;
     s.accessRevision = revision ?? s.accessRevision + 1;
-    s.refs.clear();
+    this.clearRefs(s);
     s.grant = access === 'off' ? null : { name: agent, access, token: secret() };
     s.lastActivity = this.now();
     return { access, agentToken: s.grant?.token || null };
@@ -148,7 +176,7 @@ export class Sessions {
         case 'reload': await page.reload({ waitUntil: 'domcontentloaded', timeout: 10_000 }); break;
         case 'selectPage': {
           if (!s.pages.has(action.id)) throw new Error('Window closed.');
-          s.active = action.id; s.refs.clear(); break;
+          s.active = action.id; this.clearRefs(s); break;
         }
         case 'closePopup': {
           if (page === s.root) throw new Error('Use End session to close the main page.');
@@ -160,19 +188,21 @@ export class Sessions {
   }
   async read(s, token) {
     return this.queued(s, () => this.requireAgent(s, token), async () => {
-      s.refs.clear();
+      this.clearRefs(s);
       const page = this.page(s);
       const prefix = randomBytes(4).toString('hex');
       const controls = [];
       for (const frame of page.frames()) {
         const elements = await frame.locator('a[href], button, input:not([type=hidden]), textarea, select, [role=button]').elementHandles();
+        // Every handle not kept as a reference is released at once; kept ones on the next clear.
+        for (const extra of elements.slice(200)) void extra.dispose().catch(() => {});
         for (const element of elements.slice(0, 200)) {
-          if (!(await element.isVisible().catch(() => false))) continue;
+          if (!(await element.isVisible().catch(() => false))) { void element.dispose().catch(() => {}); continue; }
           const info = await element.evaluate(el => ({
             tag: el.tagName.toLowerCase(), type: el.getAttribute('type') || '',
             label: (el.getAttribute('aria-label') || el.labels?.[0]?.innerText || el.innerText || el.getAttribute('placeholder') || '').slice(0, 200),
           })).catch(() => null);
-          if (!info) continue;
+          if (!info) { void element.dispose().catch(() => {}); continue; }
           const ref = `${prefix}-${controls.length}`;
           s.refs.set(ref, { element, page });
           controls.push({ ref, ...info });
@@ -192,14 +222,14 @@ export class Sessions {
         if (sensitive) throw new Error('The user enters credentials and authentication codes manually.');
         await found.element.fill(action.text, { timeout: 2000 });
       } else throw new Error('Unknown action.');
-      s.refs.clear();
+      this.clearRefs(s);
       s.lastActivity = this.now();
       return { done: true };
     });
   }
   async end(s) {
     if (s.closed) return;
-    s.closed = true; s.epoch++; s.grant = null; s.refs.clear();
+    s.closed = true; s.epoch++; s.grant = null; s.refs.clear(); // the context close below releases handles
     this.items.delete(s.id);
     try { await s.context.close(); } finally {
       await s.browser.close();

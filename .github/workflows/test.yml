@@ -19,3 +19,25 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: node --test
+
+  # Shared-session companion: real Chromium + MCP client, and the full
+  # extension → companion → remote page flow in an isolated profile.
+  companion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: companion
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: companion/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run test:extension
