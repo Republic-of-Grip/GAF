@@ -1,0 +1,17 @@
+:root { color-scheme: dark; font: 14px system-ui, sans-serif; background: #111820; color: #e8edf2; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+header, nav, .sharing { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 20px; border-bottom: 1px solid #34414d; background: #19232e; }
+.brand { color: #86efac; white-space: nowrap; }
+.brand span { margin-left: 8px; font-size: 11px; letter-spacing: .08em; color: #a6bbc8; }
+#route { flex: 1; } #lifetime, footer { color: #a6bbc8; font-size: 12px; }
+button, select, input { font: inherit; border: 1px solid #526779; border-radius: 6px; padding: 8px 10px; background: #243342; color: inherit; }
+button { cursor: pointer; } button:hover { background: #344c61; } button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-visible { outline: 2px solid #86efac; outline-offset: 2px; }
+.danger { border-color: #fca5a5; color: #fecaca; } label { display: flex; align-items: center; gap: 6px; }
+#navigate { display: flex; flex: 1; gap: 8px; min-width: 240px; } #url { flex: 1; min-width: 100px; }
+#permission { margin-left: auto; color: #86efac; }
+#invitation { width: 100%; padding: 12px; background: #111820; } #invitation p { max-width: 800px; color: #a6bbc8; } #invitation label { margin: 8px 0; } #invitation input { flex: 1; max-width: 650px; }
+#status { padding: 0 20px; min-height: 18px; color: #c3d1dd; }
+main { padding: 0 20px 20px; } canvas { display: block; width: 100%; max-width: 1280px; height: auto; margin: auto; background: white; border-radius: 6px; }
+footer { padding: 0 20px 16px; text-align: center; }

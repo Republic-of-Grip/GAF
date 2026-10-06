@@ -26,6 +26,33 @@ import { createMeterResetter } from './meter-actions.mjs';
 import { paintActionBadge, isBadgeOn } from '../core/badge.mjs';
 import { createTabPause, handleTabPauseMessage } from '../core/tab-pause.mjs';
 import { addAllowRule } from '../core/element-allow.mjs';
+import { createRemoteTabController } from '../core/remote-session.mjs';
+
+const remoteTabs = createRemoteTabController({ chromeApi: chrome });
+const remoteViewerUrl = chrome.runtime.getURL('src/remote/viewer.html');
+chrome.tabs.onRemoved.addListener(id => { remoteTabs.end(id).catch(() => {}); });
+chrome.tabs.onUpdated.addListener((id, change) => {
+  if (change.url) remoteTabs.navigated(id, change.url).catch(() => {});
+});
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (!message?.type?.startsWith('GAF_REMOTE_')) return false;
+  // Website content scripts must never create sessions or obtain their bearer tokens.
+  const popup = chrome.runtime.getURL('src/popup/popup.html');
+  if (sender.id !== chrome.runtime.id || ![popup, remoteViewerUrl].includes(sender.url)) {
+    reply({ ok: false, error: 'Open shared sessions from the GAF popup.' });
+    return false;
+  }
+  const id = sender.url === remoteViewerUrl ? sender.tab?.id : message.tabId;
+  const operation = message.type === 'GAF_REMOTE_OPEN' && sender.url === popup
+    ? remoteTabs.open(id, message.providerId)
+    : message.type === 'GAF_REMOTE_RECORD' && sender.url === remoteViewerUrl
+      ? remoteTabs.record(id).then(session => ({ ok: true, session }))
+      : message.type === 'GAF_REMOTE_END' && sender.url === remoteViewerUrl
+        ? remoteTabs.end(id).then(() => ({ ok: true }))
+        : Promise.reject(new Error('Unknown session action.'));
+  operation.then(reply).catch(error => reply({ ok: false, error: error.message }));
+  return true;
+});
 
 const MENU_ALLOW = 'gaf-allow-element';
 const MENU_ARCHIVE = 'gaf-archive-object';

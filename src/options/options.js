@@ -26,6 +26,7 @@ import {
 } from '../core/hide-from-archive.mjs';
 import { bindUpdateControls, readInstalledVersion, extensionsPageUrl } from '../core/updates.mjs';
 import { buildApplyPageUrl, openApplyUi } from '../core/apply-update.mjs';
+import { setupRemoteOptions } from '../remote/options.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -398,6 +399,7 @@ function setupUpdates() {
 
 async function init() {
   setupTabs();
+  await setupRemoteOptions();
   setupUpdates();
   currentSettings = await loadSettings();
   fill(currentSettings);

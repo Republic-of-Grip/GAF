@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GAF · Shared session</title><link rel="stylesheet" href="viewer.css"></head>
+<body>
+  <header>
+    <strong class="brand">GAF <span>SHARED SESSION</span></strong>
+    <span id="route">Connecting…</span>
+    <span id="lifetime"></span>
+    <button id="end" class="danger" type="button">End session</button>
+  </header>
+  <nav aria-label="Remote browsing">
+    <button id="back" type="button" aria-label="Go back">←</button>
+    <button id="reload" type="button">Reload</button>
+    <form id="navigate"><input id="url" type="url" aria-label="Remote page address" placeholder="https://…" required><button>Go</button></form>
+    <label>Window <select id="pages"></select></label>
+    <button id="closePopup" type="button">Close pop-up</button>
+  </nav>
+  <section class="sharing" aria-label="Agent controls">
+    <label>Agent <select id="agent"><option value="">No configured agents</option></select></label>
+    <label>Access <select id="access"><option value="off">Off</option><option value="read">Read only</option><option value="interact">Can interact</option></select></label>
+    <button id="grant" type="button">Apply access</button>
+    <button id="takeover" type="button">Take over · revoke access</button>
+    <span id="permission">Agent access off</span>
+    <details id="invitation" hidden><summary>Connect agent</summary><p>Connect your trusted MCP client using this session-only address and bearer token. Whoever has the token receives the selected access. Your agent client may retain its own history.</p><label>MCP address <input id="mcpUrl" readonly></label><label>Bearer token <input id="agentToken" type="password" readonly autocomplete="off"></label><button id="revealToken" type="button">Show token</button><p>The token expires on takeover, access changes, timeout or session end. GAF does not send it to an agent automatically.</p></details>
+  </section>
+  <p id="status" role="status" aria-live="polite">Starting shared session…</p>
+  <main><canvas id="screen" width="1280" height="800" tabindex="0" aria-label="Remote browser. Click to interact; type or paste to enter text."></canvas></main>
+  <footer>Remote page · enter logins manually · closing this tab ends its session and related windows. To change route, end this session and reopen the URL using another connection in GAF.</footer>
+  <script type="module" src="viewer.js"></script>
+</body></html>

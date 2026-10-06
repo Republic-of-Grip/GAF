@@ -4,6 +4,7 @@ import { findExclusionForHost, removeExclusion, activeExclusionHosts } from '../
 import { paintActionBadge, isBadgeOn } from '../core/badge.mjs';
 import { bindUpdateControls, readInstalledVersion, extensionsPageUrl } from '../core/updates.mjs';
 import { buildApplyPageUrl, openApplyUi } from '../core/apply-update.mjs';
+import { loadRemoteSettings } from '../core/remote-session.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -159,6 +160,25 @@ async function persist(partial) {
 }
 
 async function init() {
+  const remote = await loadRemoteSettings();
+  for (const provider of remote.providers) {
+    $('remoteRoute').add(new Option(provider.name, provider.id));
+  }
+  $('remoteRoute').value = remote.defaultProvider;
+  $('remoteStatus').textContent = remote.providers.length ? 'Fresh session · agent access starts off' : 'Set up connections in Options → Shared sessions.';
+  $('reloadRemote').addEventListener('click', async () => {
+    $('reloadRemote').disabled = true;
+    $('remoteStatus').textContent = 'Starting remote session…';
+    try {
+      const tab = await getActiveTab();
+      const result = await chrome.runtime.sendMessage({ type: 'GAF_REMOTE_OPEN', tabId: tab?.id, providerId: $('remoteRoute').value });
+      if (!result?.ok) throw new Error(result?.error || 'Could not start a remote session.');
+      window.close();
+    } catch (error) {
+      $('remoteStatus').textContent = error.message;
+      $('reloadRemote').disabled = false;
+    }
+  });
   settings = await loadSettings();
   exclusions = await loadExclusions();
   fillForm(settings);
