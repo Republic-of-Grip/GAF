@@ -7,9 +7,73 @@ export function sameSecret(a, b) {
   const left = Buffer.from(a), right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
 }
+/**
+ * Cloud instance-metadata services hand out the host's credentials over plain
+ * HTTP. A website could get an agent with interaction access to click a link
+ * there and then read the page, so the remote browser never loads them: typed
+ * addresses are refused (pageUrl) and Chromium's resolver refuses the hosts
+ * for links, redirects, frames and subresources (METADATA_RESOLVER_RULES).
+ * Every spelling counts: dotted IPv4, IPv4-mapped and NAT64 IPv6
+ * ([::ffff:a9fe:a9fe], [64:ff9b::a9fe:a9fe]) and hostnames with a trailing
+ * dot (metadata.google.internal.). A hostname that merely resolves to one of
+ * these addresses is not caught; on a cloud host also require IMDSv2 / block
+ * metadata at the network.
+ */
+export const METADATA_HOSTS = {
+  ipv4: ['169.254.*', '100.100.100.200'], // link-local (AWS, Azure, GCP, Oracle, DO, ECS); Alibaba
+  ipv6: ['fd00:ec2::254'], // AWS IPv6
+  names: ['metadata.google.internal', 'metadata.goog'],
+};
+const IPV6_V4_PREFIXES = ['::ffff:', '64:ff9b::']; // IPv4-mapped, NAT64
+
+/** Chromium's canonical IPv6 group for two IPv4 octets (no leading zeros). */
+const v4Group = (a, b) => ((Number(a) << 8) | Number(b)).toString(16);
+
+/**
+ * --host-resolver-rules that refuse every spelling of the given hosts.
+ * ipv4: exact 'a.b.c.d' or two-octet prefix 'a.b.*'; ipv6: canonical
+ * literals without brackets; names: each also with a trailing dot and as
+ * *.name / *.name. — Chromium matches rules on the literal host text, so
+ * 'example.com' does not cover 'example.com.' and '[::ffff:…]' never matches.
+ */
+export function resolverRulesFor({ ipv4 = [], ipv6 = [], names = [] } = {}) {
+  const hosts = [];
+  for (const entry of ipv4) {
+    const parts = entry.split('.');
+    hosts.push(entry);
+    const tail = parts.length === 3 && parts[2] === '*'
+      ? `${v4Group(parts[0], parts[1])}:*`
+      : `${v4Group(parts[0], parts[1])}:${v4Group(parts[2], parts[3])}`;
+    for (const prefix of IPV6_V4_PREFIXES) hosts.push(`${prefix}${tail}`);
+  }
+  hosts.push(...ipv6);
+  for (const name of names) hosts.push(name, `${name}.`, `*.${name}`, `*.${name}.`);
+  return hosts.map(host => `MAP ${host} ~NOTFOUND`).join(', ');
+}
+export const METADATA_RESOLVER_RULES = resolverRulesFor(METADATA_HOSTS);
+
+/** The IPv4 address inside an IPv4-mapped / NAT64 IPv6 literal, or ''. */
+function embeddedIPv4(host) {
+  const m = /^(?:::ffff:|64:ff9b::)(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(host);
+  if (!m) return '';
+  if (m[1]) return m[1];
+  const hi = parseInt(m[2], 16), lo = parseInt(m[3], 16);
+  return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.');
+}
+
+export function isMetadataHost(hostname) {
+  let h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  h = embeddedIPv4(h) || h;
+  return /^169\.254\.\d{1,3}\.\d{1,3}$/.test(h) ||
+    h === '100.100.100.200' ||
+    h === 'fd00:ec2::254' ||
+    METADATA_HOSTS.names.some(name => h === name || h.endsWith(`.${name}`));
+}
+
 export function pageUrl(value) {
   const url = new URL(value);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Only HTTP/HTTPS page addresses are supported.');
+  if (isMetadataHost(url.hostname)) throw new Error('Cloud metadata addresses are blocked.');
   return url.href;
 }
 
@@ -29,7 +93,7 @@ export class Sessions {
     let session;
     try {
       // Each session owns its browser process and a fresh non-persistent context.
-      browser = await this.launch({ headless: true, executablePath: this.executablePath });
+      browser = await this.launch({ headless: true, executablePath: this.executablePath, args: [`--host-resolver-rules=${METADATA_RESOLVER_RULES}`] });
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: false, serviceWorkers: 'block' });
       context.setDefaultTimeout(3000);
       session = {
@@ -64,10 +128,15 @@ export class Sessions {
     page.on('download', download => { void download.cancel().catch(() => {}); });
     page.on('close', () => {
       session.pages.delete(id);
-      session.refs.clear();
+      this.clearRefs(session);
       if (session.active === id) session.active = session.pages.keys().next().value || '';
     });
-    page.on('framenavigated', () => session.refs.clear());
+    page.on('framenavigated', () => this.clearRefs(session));
+  }
+  /** Forget control references and release their browser-side element handles. */
+  clearRefs(s) {
+    for (const { element } of s.refs.values()) void element.dispose().catch(() => {});
+    s.refs.clear();
   }
   expired(s) {
     return s.closed || this.now() - s.lastOwner >= this.leaseMs ||
@@ -107,7 +176,7 @@ export class Sessions {
     // Synchronous revocation prevents queued actions from running after Take over.
     s.epoch++;
     s.accessRevision = revision ?? s.accessRevision + 1;
-    s.refs.clear();
+    this.clearRefs(s);
     s.grant = access === 'off' ? null : { name: agent, access, token: secret() };
     s.lastActivity = this.now();
     return { access, agentToken: s.grant?.token || null };
@@ -148,7 +217,7 @@ export class Sessions {
         case 'reload': await page.reload({ waitUntil: 'domcontentloaded', timeout: 10_000 }); break;
         case 'selectPage': {
           if (!s.pages.has(action.id)) throw new Error('Window closed.');
-          s.active = action.id; s.refs.clear(); break;
+          s.active = action.id; this.clearRefs(s); break;
         }
         case 'closePopup': {
           if (page === s.root) throw new Error('Use End session to close the main page.');
@@ -160,19 +229,21 @@ export class Sessions {
   }
   async read(s, token) {
     return this.queued(s, () => this.requireAgent(s, token), async () => {
-      s.refs.clear();
+      this.clearRefs(s);
       const page = this.page(s);
       const prefix = randomBytes(4).toString('hex');
       const controls = [];
       for (const frame of page.frames()) {
         const elements = await frame.locator('a[href], button, input:not([type=hidden]), textarea, select, [role=button]').elementHandles();
+        // Every handle not kept as a reference is released at once; kept ones on the next clear.
+        for (const extra of elements.slice(200)) void extra.dispose().catch(() => {});
         for (const element of elements.slice(0, 200)) {
-          if (!(await element.isVisible().catch(() => false))) continue;
+          if (!(await element.isVisible().catch(() => false))) { void element.dispose().catch(() => {}); continue; }
           const info = await element.evaluate(el => ({
             tag: el.tagName.toLowerCase(), type: el.getAttribute('type') || '',
             label: (el.getAttribute('aria-label') || el.labels?.[0]?.innerText || el.innerText || el.getAttribute('placeholder') || '').slice(0, 200),
           })).catch(() => null);
-          if (!info) continue;
+          if (!info) { void element.dispose().catch(() => {}); continue; }
           const ref = `${prefix}-${controls.length}`;
           s.refs.set(ref, { element, page });
           controls.push({ ref, ...info });
@@ -192,14 +263,14 @@ export class Sessions {
         if (sensitive) throw new Error('The user enters credentials and authentication codes manually.');
         await found.element.fill(action.text, { timeout: 2000 });
       } else throw new Error('Unknown action.');
-      s.refs.clear();
+      this.clearRefs(s);
       s.lastActivity = this.now();
       return { done: true };
     });
   }
   async end(s) {
     if (s.closed) return;
-    s.closed = true; s.epoch++; s.grant = null; s.refs.clear();
+    s.closed = true; s.epoch++; s.grant = null; s.refs.clear(); // the context close below releases handles
     this.items.delete(s.id);
     try { await s.context.close(); } finally {
       await s.browser.close();

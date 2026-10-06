@@ -1,4 +1,4 @@
-import { remoteRequest } from '../core/remote-session.mjs';
+import { remoteRequest, connectionVerdict } from '../core/remote-session.mjs';
 
 const $ = id => document.getElementById(id);
 let session;
@@ -6,6 +6,32 @@ let stopped = false;
 let inputTail = Promise.resolve();
 let accessRevision = 0;
 const timers = [];
+let lastHeartbeatOk = Date.now();
+let interrupted = false;
+/**
+ * A failed poll is not the end of the session: Wi-Fi blips and a busy
+ * companion are normal. End only when the server says the session is gone
+ * (410) or no heartbeat has landed for a whole lease.
+ */
+function connectionProblem(error) {
+  if (stopped) return;
+  const verdict = connectionVerdict(error, Date.now() - lastHeartbeatOk);
+  if (verdict === 'ended') return finish('Session ended. Close this tab and start a fresh session from GAF.');
+  if (verdict === 'expired') return finish('Connection lost. The remote session has expired; start a fresh one from GAF.');
+  interrupted = true;
+  status('Connection interrupted — retrying…');
+}
+function connectionOk() {
+  if (!interrupted || stopped) return;
+  interrupted = false;
+  status('Connection restored.');
+}
+async function heartbeat() {
+  if (stopped) return;
+  await request('heartbeat', { method: 'POST' });
+  lastHeartbeatOk = Date.now();
+  connectionOk();
+}
 const screen = $('screen');
 const drawing = screen.getContext('2d');
 const status = text => { $('status').textContent = text; };
@@ -38,6 +64,7 @@ async function refreshState() {
   if (stopped) return;
   const state = await request('state');
   if (stopped) return;
+  connectionOk();
   // A poll started before Take over must not repaint the older grant afterward.
   if (state.accessRevision < accessRevision) return;
   const active = state.pages.find(p => p.id === state.active);
@@ -103,12 +130,12 @@ async function init() {
   }
   // Reloading the viewer returns control to its user; never silently keep an old invitation.
   await setAccess('off');
-  await request('heartbeat', { method: 'POST' });
+  await heartbeat();
   await frame();
   await refreshState();
   timers.push(setInterval(frame, 400));
-  timers.push(setInterval(() => refreshState().catch(() => finish('Session ended or connection lost. Remote cleanup follows automatically.')), 2500));
-  timers.push(setInterval(() => { if (!stopped) request('heartbeat', { method: 'POST' }).catch(() => finish('Connection lost. The remote session will expire automatically.')); }, 10_000));
+  timers.push(setInterval(() => refreshState().catch(connectionProblem), 2500));
+  timers.push(setInterval(() => heartbeat().catch(connectionProblem), 10_000));
 
   $('navigate').addEventListener('submit', event => { event.preventDefault(); void input({ type: 'navigate', url: $('url').value }); });
   $('back').onclick = () => input({ type: 'back' });

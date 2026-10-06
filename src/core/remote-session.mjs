@@ -2,6 +2,20 @@
 export const REMOTE_SETTINGS_KEY = 'gafRemoteConnections';
 export const REMOTE_SESSION_PREFIX = 'gafRemoteTab:';
 
+/** Mirrors the companion's owner lease (companion/sessions.mjs leaseMs). */
+export const OWNER_LEASE_MS = 90_000;
+
+/**
+ * What a failed viewer poll means. 'ended': the companion says the session is
+ * gone (410). 'expired': no heartbeat landed for a whole lease, so the
+ * companion has ended it. 'retry': anything else (Wi-Fi blip, busy companion).
+ */
+export function connectionVerdict(error, msSinceHeartbeat, leaseMs = OWNER_LEASE_MS) {
+  if (error?.status === 410) return 'ended';
+  if (msSinceHeartbeat > leaseMs) return 'expired';
+  return 'retry';
+}
+
 export function remoteEndpoint(value) {
   const url = new URL(String(value || '').trim());
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
@@ -57,7 +71,9 @@ export async function remoteRequest(endpoint, path, token, { method = 'GET', bod
   if (!response.ok) {
     let message = 'Remote connection failed.';
     try { message = (await response.json()).error || message; } catch { /* no content */ }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status; // 410 = session ended; anything else may be transient
+    throw error;
   }
   if (response.status === 204) return null;
   return response.json();

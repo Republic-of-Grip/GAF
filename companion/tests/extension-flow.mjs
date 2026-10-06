@@ -13,6 +13,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const extensionPath = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const inspect = process.argv.includes('--inspect');
+// Optional artefacts go only where asked (never beside the repository): --screenshot=<file>.
+const screenshotPath = process.argv.find(a => a.startsWith('--screenshot='))?.slice('--screenshot='.length) || '';
 const profile = await mkdtemp(resolve(tmpdir(), 'gaf-extension-test-'));
 const key = secret();
 const app = createCompanion({ apiToken: key });
@@ -96,12 +98,15 @@ try {
   assert.equal(await source.locator('#permission').innerText(), 'Agent access off');
   await assert.rejects(client.listTools());
   assert.equal(session.grant, null);
-  await source.waitForTimeout(500); // Capture a subsequent remote frame for visual QA.
-  await source.screenshot({ path: resolve(extensionPath, '../shared-session-preview.png') });
+  if (screenshotPath) {
+    await source.waitForTimeout(500); // Capture a subsequent remote frame for visual QA.
+    await source.screenshot({ path: resolve(screenshotPath) });
+  }
   assert.deepEqual(errors, []);
   if (inspect) {
-    await writeFile(resolve(extensionPath, '../browser-inspection.json'), JSON.stringify({ extensionId, sourceId, viewerUrl: `${base}/src/remote/viewer.html`, optionsUrl: `${base}/src/options/options.html` }));
-    console.log('Browser verification ready on port 9337. No session credentials printed.');
+    const inspection = resolve(tmpdir(), 'gaf-browser-inspection.json');
+    await writeFile(inspection, JSON.stringify({ extensionId, sourceId, viewerUrl: `${base}/src/remote/viewer.html`, optionsUrl: `${base}/src/options/options.html` }));
+    console.log(`Browser verification ready on port 9337 (${inspection}). No session credentials printed.`);
     await new Promise(resolve => {
       const timeout = setTimeout(resolve, 60_000);
       process.once('SIGUSR1', () => { clearTimeout(timeout); resolve(); });
@@ -114,8 +119,12 @@ try {
   for (let i = 0; i < 100 && session.browser.isConnected(); i++) await new Promise(r => setTimeout(r, 25));
   assert.equal(session.browser.isConnected(), false);
   assert.equal(auth.isClosed(), true);
-  const records = await worker.evaluate(() => chrome.storage.session.get(null));
-  assert.equal(Object.keys(records).some(k => k.startsWith('gafRemoteTab:')), false);
+  // The worker removes its record only after the companion answers the DELETE,
+  // which can land after the browser above disconnects: wait for it, don't race it.
+  const hasRecord = () => worker.evaluate(async () =>
+    Object.keys(await chrome.storage.session.get(null)).some(k => k.startsWith('gafRemoteTab:')));
+  for (let i = 0; i < 200 && await hasRecord(); i++) await new Promise(r => setTimeout(r, 25));
+  assert.equal(await hasRecord(), false);
   console.log('PASS: settings → GAF popup code (inactive-tab harness) → remote viewer → pointer/keyboard → auth popup → actual MCP agent → takeover → local tab close and cleanup. No page errors.');
 } finally {
   await client?.close().catch(() => {});
